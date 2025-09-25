@@ -1,5 +1,6 @@
 #include "pico/stdlib.h"
 #include "hardware/pio.h"
+#include "hardware/pwm.h"
 #include "hardware/clocks.h"
 #include "ws2812.pio.h"
 #include "hardware/i2c.h"
@@ -7,11 +8,26 @@
 #include "math.h"
 #include "stdio.h"
 
+// PWM
+
+// Конфигурация сигнала
+//#define PWM_FREQUENCY 56000000  // 56 МГц
+//#define PWM_FREQUENCY 56000000  // 
+#define TARGET_FREQ 18750000    // 56 МГц
+#define DUTY_CYCLE 50           // 50% скважность
+
+#define PWM_FREQUENCY 400000  // 
+#define DEFAULT_DUTY_CYCLE 50   // Скважность по умолчанию 50%
+
+// Пины (можно изменить)
+#define PWM_PIN 14
+
 // OLED Configuration
 #define I2C_PORT i2c1
 #define I2C_SDA 6
 #define I2C_SCL 7
 
+// RGB
 #define IS_RGBW false
 #define NUM_PIXELS 1
 #define WS2812_PIN 16
@@ -147,36 +163,147 @@ void i2c_scan() {
     printf("\nScan complete.\n");
 }
 
+// bool setup_precise_pwm(uint pin, uint32_t freq, uint8_t duty_cycle) {
+//     gpio_set_function(pin, GPIO_FUNC_PWM);
+    
+//     float divider = (float)clock_get_hz(clk_sys) / (2.0f * TARGET_FREQ);
+    
+//     printf("Расчетный делитель: %.6f\n", divider);
+
+//     uint slice_num = pwm_gpio_to_slice_num(PWM_PIN);
+//     uint channel = pwm_gpio_to_channel(PWM_PIN);
+    
+//     // Устанавливаем делитель частоты
+//     pwm_set_clkdiv(slice_num, divider);
+    
+//     // Устанавливаем период (TOP = 1 для максимальной частоты)
+//     pwm_set_wrap(slice_num, 1);
+    
+//     // Устанавливаем скважность 50%
+//     // При TOP = 1, уровень = 1 дает 50% скважность
+//     pwm_set_chan_level(slice_num, channel, 1);
+    
+//     // Включаем PWM
+//     pwm_set_enabled(slice_num, true);
+    
+//     return false;
+// }
+
+bool setup_precise_pwm(uint pin, uint32_t freq, uint8_t duty_cycle) {
+    gpio_set_function(pin, GPIO_FUNC_PWM);
+    
+    uint slice_num = pwm_gpio_to_slice_num(pin);
+    uint channel = pwm_gpio_to_channel(pin);
+    
+    uint32_t sys_clk = clock_get_hz(clk_sys);
+    
+    // Пробуем разные значения TOP для лучшей точности
+    for (uint16_t top = 1; top <= 10; top++) {
+        double divider = (double)sys_clk / (freq * (top + 1));
+        
+        if (divider >= 1.0f / 256.0f && divider <= 255.0f) {
+            pwm_set_clkdiv(slice_num, divider);
+            pwm_set_wrap(slice_num, top);
+            
+            // Расчет уровня для заданной скважности
+            uint16_t level = (duty_cycle * (top + 1)) / 100;
+            pwm_set_chan_level(slice_num, channel, level);
+            
+            pwm_set_enabled(slice_num, true);
+            
+            double actual_freq = (double)sys_clk / (divider * (top + 1));
+            printf("TOP=%d, Делитель=%.6f, Факт.частота=%.2f МГц\n", 
+                   top, divider, actual_freq / 1000000.0);
+            
+            return true;
+        }
+    }
+    
+    return false;
+}
 
 int main() {
     stdio_init_all();
     ws2812_init();
     init_i2c_safe();
-    //i2c_scan();
 
-    // stdio_init_all();
+    sleep_ms(1000);
+    //set_rgb(127, 127, 127);
 
-    set_rgb(0, 0, 127);
+    //gpio_set_function(PWM_PIN, GPIO_FUNC_PWM);
+    
+    // uint slice_num = pwm_gpio_to_slice_num(PWM_PIN);
+    // uint channel = pwm_gpio_to_channel(PWM_PIN);
+    
+    float clock_hz = (float)clock_get_hz(clk_sys);
+    // float divider = clock_hz / (PWM_FREQUENCY * 256.0);
+    
+//     if (divider < 1.0) {
+//         set_rgb(127, 0, 0);
+//     } else {
+// // //        set_rgb(0, 0, 127);
+// //         // Если требуемая частота слишком высокая
+// //         // printf("Ошибка: требуемая частота слишком высока!\n");
+// //         // printf("Максимальная частота PWM: %.2f МГц\n", (clock_hz / 256.0) / 1000000.0);
+// //         pwm_set_clkdiv(slice_num, divider);
+        
+// //         // Устанавливаем период PWM
+// //         // TOP значение определяет период: период = (TOP + 1) * (делитель / системная_частота)
+// //         pwm_set_wrap(slice_num, 255); // 8-битное разрешение
+        
+// //         // Устанавливаем скважность по умолчанию
+// //         pwm_set_chan_level(slice_num, channel, 128); // 50% при TOP=255
+        
+// //         // Включаем PWM
+// //         pwm_set_enabled(slice_num, true);
 
-    // init_oled();
-    // set_rgb(0, 127, 0);
+//         //max speed
+//     }
 
+// #ifdef FALS
+//     uint slice_num = pwm_gpio_to_slice_num(PWM_PIN);
+//     uint channel = pwm_gpio_to_channel(PWM_PIN);
+//     pwm_set_clkdiv(slice_num, 1.0f);
+//     // Минимальный период (TOP = 1)
+//     pwm_set_wrap(slice_num, 1);
+//     // Скважность 50% (1/2)
+//     pwm_set_chan_level(slice_num, channel, 1);
+//     pwm_set_enabled(slice_num, true);
+//     set_rgb(0, 0, 127);
+// #else
+    if (setup_precise_pwm(PWM_PIN, TARGET_FREQ/4, DUTY_CYCLE)) {
+        set_rgb(127, 0, 0);
+
+    } else {
+        set_rgb(0, 127, 0);
+    }
+// #endif
+
+    // display test
     ssd1306_t disp;
     disp.external_vcc = false;
     ssd1306_init(&disp, 128, 64, 0x3C, I2C_PORT);
-//    ssd1306_init(&disp, 128, 64, 0x3D, I2C_PORT);
     ssd1306_fill(&disp);
 
-
-    ssd1306_draw_string(&disp, 1, 1, 2, "abcdefghijklmnopqrstuvwxyz");
+    ssd1306_draw_string(&disp, 1, 1, 2, "test");
     ssd1306_show(&disp);
 
 
-//    printf("OLED Display Test\n");
-
-    set_rgb(0, 127, 0);
+    //set_rgb(0, 127, 0);
 
     while (true) {
+        // printf("Максимальная частота PWM: %.2f МГц\n", (clock_hz / 256.0) / 1000000.0);
+        // printf("sysclk: %.2f МГц\n", clock_hz / 1000000.0);
+        // printf("Частота: %d Гц (%.2f МГц)\n", PWM_FREQUENCY, PWM_FREQUENCY / 1000000.0);
+        // printf("Скважность: %d%%\n", DEFAULT_DUTY_CYCLE);
+        // printf("Системная частота: %.2f МГц\n", clock_hz / 1000000.0);
+        // // printf("Делитель: %.6f\n", divider);
+        // sleep_ms(1000);
+
+        
+
+        sleep_us(200);
+
         // set_rgb(40, 40, 40);
         //ssd1306_clear(&disp);
 
