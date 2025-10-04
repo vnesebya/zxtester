@@ -14,20 +14,21 @@ add_executable(${TARGET}
     ssd1306.c
 )
 
-pico_enable_stdio_usb(${TARGET} 1)
-pico_enable_stdio_uart(${TARGET} 0)
+# pico_enable_stdio_usb(${TARGET} 1)
+# pico_enable_stdio_uart(${TARGET} 0)
 
 # Add the WS2812 PIO program
-pico_generate_pio_header(${TARGET} ${CMAKE_CURRENT_LIST_DIR}/ws2812.pio)
+# pico_generate_pio_header(${TARGET} ${CMAKE_CURRENT_LIST_DIR}/ws2812.pio)
+pico_generate_pio_header(${TARGET} ${CMAKE_CURRENT_LIST_DIR}/pio_squarewave.pio)
 
 target_link_libraries(${TARGET} 
 	pico_stdlib 
-	pico_multicore 
+	# pico_multicore 
 	hardware_pio
 	hardware_gpio
 	hardware_i2c
-	hardware_pwm
-	pico_stdio_usb
+	# hardware_pwm
+	# pico_stdio_usb
 )
 
 pico_add_extra_outputs(${TARGET})
