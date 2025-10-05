@@ -19,10 +19,11 @@ pico_enable_stdio_uart(${TARGET} 1)
 
 # Add the WS2812 PIO program
 pico_generate_pio_header(${TARGET} ${CMAKE_CURRENT_LIST_DIR}/ws2812.pio)
+pico_generate_pio_header(${TARGET} ${CMAKE_CURRENT_LIST_DIR}/counter.pio)
 
 target_link_libraries(${TARGET} 
 	pico_stdlib 
-	pico_multicore 
+#	pico_multicore 
 	hardware_pio
 	hardware_gpio
 	hardware_i2c
