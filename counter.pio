@@ -1,0 +1,21 @@
+.program counter
+
+;.wrap_target
+;begin:
+;    in null, 1         ; Increment ISR by 1 (adds 1 to ISR)
+;    push noblock 
+;    jmp begin
+;.wrap
+
+begin:
+    wait 0 pin 0         ; Wait for falling edge
+    mov x, isr           ; Move ISR to X
+    jmp x--, do_push     ; Decrement X, if not zero, jump to do_push
+    mov isr, x           ; Move X back to ISR
+    push noblock         ; Push ISR to FIFO
+    jmp begin
+do_push:
+    mov isr, x
+    push noblock
+    jmp begin
+.wrap

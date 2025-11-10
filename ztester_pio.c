@@ -6,16 +6,14 @@
 #include "pico/stdio.h"
 #include "math.h"
 #include "stdio.h"
-#include "dutycycle.pio.h"
+
 #include "ssd1306.h"
 
 #ifdef ONBOARD_RGB
 #include "ws2812.pio.h"
 #endif
 
-#ifdef USING_PIO_COUNTER_PROGRAM
- #include "counter.pio.h"
-#endif // DEBUG
+#include "counter.pio.h"
 
 // UART
 #define UART_ID uart0
@@ -194,8 +192,6 @@ void pio_irq_handler() {
     pulse_count++; // Увеличиваем счетчик
 }
 
-#ifdef USING_PIO_COUNTER_PROGRAM
- 
 void counter_init(uint pin) {
     // Загружаем PIO программу
     offset = pio_add_program(pio, &counter_program);
@@ -301,9 +297,9 @@ void counter_init_with_irq(uint pin) {
     printf("PIO Counter with IRQ initialized on pin %d\n", pin);
 }
 
-#endif
+volatile uint32_t last_print = 0;
+volatile uint32_t total_pulses = 0;
 
-#define SIGNAL_PIN 29
 
 int main() {
     stdio_init_all();
@@ -334,44 +330,32 @@ int main() {
 
     // set_rgb(0, 127, 0);
 
-    printf("Started...");
+    printf("Started... %1");
 
-#ifdef USING_PIO_COUNTER_PROGRAM
+    const uint COUNT_PIN = 2; 
+    
     counter_init(COUNT_PIN);
-#endif
-
-    // Configure state machine
-    pio_sm_config c = dutycycle_program_get_default_config(offset);
-    pio_gpio_init(pio, SIGNAL_PIN);
-    pio_sm_set_consecutive_pindirs(pio, sm, SIGNAL_PIN, 1, false);
-    sm_config_set_in_pins(&c, SIGNAL_PIN);
-    sm_config_set_jmp_pin(&c, SIGNAL_PIN);
-    sm_config_set_clkdiv(&c, 1.0f);
-
-    pio_sm_init(pio, sm, offset, &c);
-    pio_sm_set_enabled(pio, sm, true);
-
-    printf("RP2040 Frequency & Duty Cycle Measurement\n");
-    printf("Signal input: GPIO %d\n", SIGNAL_PIN);
+    
+    uint32_t last_display_time = time_us_32();
+    uint32_t last_count = 0;
 
     while (true) {
-        // Wait for both high and low times (2 pushes)
-        if (pio_sm_get_rx_fifo_level(pio, sm) >= 2) {
-            uint32_t high_cycles = pio_sm_get(pio, sm);
-            uint32_t low_cycles = pio_sm_get(pio, sm);
-
-            uint32_t sys_clk = clock_get_hz(clk_sys);
-            float high_time = (float)high_cycles / sys_clk;
-            float low_time = (float)low_cycles / sys_clk;
-            float period = high_time + low_time;
-            float freq = period > 0 ? 1.0f / period : 0.0f;
-            float duty_plus = period > 0 ? (high_time / period) * 100.0f : 0.0f;
-            float duty_minus = period > 0 ? (low_time / period) * 100.0f : 0.0f;
-
-            printf("High: %.6f s | Low: %.6f s | Freq: %.2f Hz | Duty+: %.2f%% | Duty-: %.2f%%\n",
-                   high_time, low_time, freq, duty_plus, duty_minus);
+        uint32_t current_count = 0xffffffff - pio_counter_read2();
+        //uint32_t current_count = pio_sm_get_blocking(pio, sm);
+        //uint32_t current_count = pulse_count;
+        
+        uint32_t current_time = time_us_32();
+        if (current_time - last_display_time >= 2000000) {
+            uint32_t delta = current_count - last_count;
+            float frequency = (float)delta / ((current_time - last_display_time) / 1000000.0f);
+            
+            printf("Total pulses: %u, Frequency: %.1f Hz\n", 
+                   current_count, frequency);
+            
+            last_count = current_count;
+            last_display_time = current_time;
         }
-        sleep_ms(10);
+        //printf("long string abcdefghijklmnopqrstuvwxyz");
+        sleep_ms(200);
     }
-
 }
