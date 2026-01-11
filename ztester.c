@@ -315,7 +315,7 @@ void counter_init_with_irq(uint pin) {
 #define BTN_LEFT_PIN 29
 
  // GPIO пин для триггера (опциона8ьно)
-#define BUFFER_SIZE 128       // Размер буфера в 32-битных словах
+#define BUFFER_SIZE 16       // Размер буфера в 32-битных словах
 #define SAMPLE_RATE 100000000  // Желаемая частота дискретизации (100 МГц)
 #define CAPTURE_INTERVAL_MS 1000 // Интервал между захватами в мс
 
@@ -401,7 +401,8 @@ void stop_capture() {
 }
 
 // Анализ сигнала - подсчет переходов и статистики
-void analyze_signal(const uint32_t *buffer, uint32_t word_count, uint32_t capture_id) {
+// capture_duration_us: duration of the capture in microseconds
+void analyze_signal(const uint32_t *buffer, uint32_t word_count, uint32_t capture_id, uint32_t capture_duration_us) {
     uint32_t high_count = 0;
     uint32_t transitions = 0;
     uint32_t pulse_widths[2] = {0, 0}; // [0] - low pulses, [1] - high pulses
@@ -445,7 +446,8 @@ void analyze_signal(const uint32_t *buffer, uint32_t word_count, uint32_t captur
     printf("Transitions: %lu\n", transitions);
     
     if (transitions > 1) {
-        double estimated_freq = (transitions / 2.0) * (SAMPLE_RATE / (double)total_samples);
+        double capture_duration_s = (double)capture_duration_us / 1e6;
+        double estimated_freq = (transitions / 2.0) / capture_duration_s;
         printf("Estimated frequency: %.2f Hz\n", estimated_freq);
     }
     
@@ -473,7 +475,7 @@ void analyze_signal(const uint32_t *buffer, uint32_t word_count, uint32_t captur
         printf("Signal: Periodic waveform\n");
     }
     
-    printf("Capture duration: %.3f ms\n", (total_samples * 1000.0) / SAMPLE_RATE);
+    printf("Capture duration: %.3f ms\n", (double)capture_duration_us / 1000.0);
     printf("====================\n");
 }
 
@@ -584,7 +586,7 @@ int main() {
                 inactive_captures = 0;
                 printf("ACTIVE - ");
                 // Детальный анализ для активных сигналов
-                analyze_signal(sample_buffer, words_captured, capture_count);
+                analyze_signal(sample_buffer, words_captured, capture_count, capture_duration);
             } else {
                 inactive_captures++;
                 printf("NO SIGNAL");
