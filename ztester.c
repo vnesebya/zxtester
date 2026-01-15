@@ -316,7 +316,7 @@ void counter_init_with_irq(uint pin) {
 
  // GPIO пин для триггера (опциона8ьно)
 #define BUFFER_SIZE 16       // Размер буфера в 32-битных словах
-#define SAMPLE_RATE 100000000  // Желаемая частота дискретизации (100 МГц)
+#define SAMPLE_RATE 200000  // Желаемая частота дискретизации (200 kHz)
 #define CAPTURE_INTERVAL_MS 1000 // Интервал между захватами в мс
 
 
@@ -353,8 +353,20 @@ PIO setup_logic_analyzer_pio(uint sm, uint pin) {
     sm_config_set_in_pins(&c, pin);
     
     // Расчет делителя частоты
-    float div = clock_get_hz(clk_sys) / (SAMPLE_RATE * 32.0);
+    // The PIO loop executes 3 instructions per sample: set, in, jmp
+    // Each sample executes `in pins,1` and the following `jmp` (two instructions per sample).
+    const float cycles_per_sample = 2.0f;
+    float div = (float)clock_get_hz(clk_sys) / (SAMPLE_RATE * cycles_per_sample);
+    // Clamp divider to minimum 1.0 (can't make SM faster than system clock)
+    if (div < 1.0f) div = 1.0f;
     sm_config_set_clkdiv(&c, div);
+    // record achieved sample rate for later analysis
+    double achieved_sm_clock = (double)clock_get_hz(clk_sys) / (double)div;
+    double achieved_sample_rate = achieved_sm_clock / (double)cycles_per_sample;
+    printf("PIO clkdiv=%.6f, SM clock=%.0f Hz, sample_rate=%.2f Hz\n", div, achieved_sm_clock, achieved_sample_rate);
+    // store globally for analysis
+    extern double g_actual_sample_rate;
+    g_actual_sample_rate = achieved_sample_rate;
     
     // Настройка сдвигового регистра
     sm_config_set_in_shift(&c, true, true, 32);
@@ -363,6 +375,9 @@ PIO setup_logic_analyzer_pio(uint sm, uint pin) {
     pio_sm_init(pio, sm, offset, &c);
     return pio;
 }
+
+// Глобальная реальная частота сэмплирования, вычисляемая при инициализации PIO
+double g_actual_sample_rate = 0.0;
 
 // Запуск захвата данных
 void start_capture() {
@@ -446,9 +461,19 @@ void analyze_signal(const uint32_t *buffer, uint32_t word_count, uint32_t captur
     printf("Transitions: %lu\n", transitions);
     
     if (transitions > 1) {
-        double capture_duration_s = (double)capture_duration_us / 1e6;
+        double capture_duration_s;
+        if (g_actual_sample_rate > 0.0) {
+            capture_duration_s = (double)total_samples / g_actual_sample_rate;
+        } else {
+            capture_duration_s = (double)capture_duration_us / 1e6;
+        }
         double estimated_freq = (transitions / 2.0) / capture_duration_s;
         printf("Estimated frequency: %.2f Hz\n", estimated_freq);
+        if (g_actual_sample_rate > 0.0) {
+            printf("(used computed capture duration %.3f ms from sample_rate %.2f Hz)\n", capture_duration_s*1000.0, g_actual_sample_rate);
+        } else {
+            printf("(used measured capture duration %.3f ms)\n", (double)capture_duration_us/1000.0);
+        }
     }
     
     if (pulse_widths[0] > 0 && pulse_widths[1] > 0) {
@@ -566,6 +591,9 @@ int main() {
             uint32_t capture_start = time_us_32();
             // Use blocking DMA wait as a robust fallback if IRQ isn't firing
             dma_channel_wait_for_finish_blocking(dma_channel);
+            uint32_t capture_duration = time_us_32() - capture_start;
+            stop_capture();
+
             if (!capture_complete) {
                 // If the IRQ handler didn't run for some reason, mark capture done
                 capture_complete = true;
@@ -574,7 +602,6 @@ int main() {
                 // Acknowledge any pending IRQ to keep state consistent
                 dma_channel_acknowledge_irq0(dma_channel);
             }
-            uint32_t capture_duration = time_us_32() - capture_start;
             
             printf("done in %lu us, words_captured %lu", capture_duration, words_captured);
             
