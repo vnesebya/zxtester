@@ -323,7 +323,7 @@ int main() {
     ssd1306_t disp;
     disp.external_vcc = false;
     ssd1306_init(&disp, 128, 64, 0x3C, OLED_I2C_PORT);
-    ssd1306_fill(&disp);
+    ssd1306_fill(&disp, 0);
 
     ssd1306_draw_string(&disp, 1, 1, 2, "starting...");
     ssd1306_show(&disp);

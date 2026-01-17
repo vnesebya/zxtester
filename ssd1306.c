@@ -63,9 +63,9 @@ void ssd1306_clear(ssd1306_t *disp) {
     }
 }
 
-void ssd1306_fill(ssd1306_t *disp) {
+void ssd1306_fill(ssd1306_t *disp, uint8_t data) {
     for (int i = 0; i < sizeof(disp->buffer); i++) {
-        disp->buffer[i] = 1;
+        disp->buffer[i] = data;
     }
 }
 

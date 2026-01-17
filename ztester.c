@@ -61,11 +61,7 @@ volatile bool capture_complete = false;
 volatile uint32_t samples_captured = 0;
 volatile uint32_t words_captured = 0;
 volatile uint32_t capture_count = 0;
-int dma_channel;
-
-// Глобальная реальная частота сэмплирования, вычисляемая при инициализации PIO
-double g_actual_sample_rate = 0.0;
-
+int la_dma_channel;
 
 void set_rgb(uint8_t r, uint8_t g, uint8_t b) {
     uint32_t rgb = ((uint32_t)(r) << 8) |
@@ -186,16 +182,17 @@ void setup_uart() {
 
 // Обработчик прерывания DMA
 void dma_handler() {
-    if (dma_channel_get_irq0_status(dma_channel)) {
-        dma_channel_acknowledge_irq0(dma_channel);
+    if (dma_channel_get_irq0_status(la_dma_channel)) {
+        dma_channel_acknowledge_irq0(la_dma_channel);
         capture_complete = true;
         words_captured = BUFFER_SIZE;
         samples_captured = BUFFER_SIZE * 32;
-        dma_channel_abort(dma_channel);
+        dma_channel_abort(la_dma_channel);
     }
 }
 
-PIO setup_logic_analyzer_pio(uint sm, uint pin)  {
+// returns real sampling frequency 
+double setup_logic_analyzer_pio(uint sm, uint pin)  {
     uint offset = pio_add_program(la_pio, &logic_analyzer_program);
     
     pio_gpio_init(la_pio, pin);
@@ -204,23 +201,27 @@ PIO setup_logic_analyzer_pio(uint sm, uint pin)  {
     pio_sm_config c = logic_analyzer_program_get_default_config(offset);
     sm_config_set_in_pins(&c, pin);
     
-    const float cycles_per_sample = 2.03125f;
-    float div = 1.0;
+    const float cycles_per_sample = 2.03125f; // !
+    float div = 1.0; // sampling as fast as we can 
     sm_config_set_clkdiv(&c, div);
 
     double achieved_sm_clock = (double)clock_get_hz(clk_sys) / (double)div;
     double achieved_sample_rate = achieved_sm_clock / (double)cycles_per_sample;
     printf("PIO clkdiv=%.6f, SM clock=%.0f Hz, sample_rate=%.2f Hz\n", div, achieved_sm_clock, achieved_sample_rate);
-
-    extern double g_actual_sample_rate;
-    g_actual_sample_rate = achieved_sample_rate;
     
-    // Настройка сдвигового регистра
+    // Shift register
     sm_config_set_in_shift(&c, true, true, 32);
     sm_config_set_fifo_join(&c, PIO_FIFO_JOIN_RX);
     
     pio_sm_init(la_pio, sm, offset, &c);
-    return la_pio;
+
+    // DMA init
+    la_dma_channel = dma_claim_unused_channel(true);
+    dma_channel_set_irq0_enabled(la_dma_channel, true);
+    irq_set_exclusive_handler(DMA_IRQ_0, dma_handler);
+    irq_set_enabled(DMA_IRQ_0, true);
+
+    return achieved_sample_rate;
 }
 
 
@@ -231,14 +232,14 @@ void start_capture() {
     words_captured = 0;
     
     // Настройка DMA
-    dma_channel_config config = dma_channel_get_default_config(dma_channel);
+    dma_channel_config config = dma_channel_get_default_config(la_dma_channel);
     channel_config_set_transfer_data_size(&config, DMA_SIZE_32);
     channel_config_set_read_increment(&config, false);
     channel_config_set_write_increment(&config, true);
     channel_config_set_dreq(&config, pio_get_dreq(pio0, 0, false));
     
     dma_channel_configure(
-        dma_channel,
+        la_dma_channel,
         &config,
         sample_buffer,
         &pio0->rxf[0],
@@ -256,13 +257,13 @@ void start_capture() {
 void stop_capture() {
     pio_sm_set_enabled(pio0, 0, false);
     if (!capture_complete) {
-        dma_channel_abort(dma_channel);
+        dma_channel_abort(la_dma_channel);
     }
 }
 
 // Анализ сигнала - подсчет переходов и статистики
 // capture_duration_us: duration of the capture in microseconds
-void analyze_signal(const uint32_t *buffer, uint32_t word_count, uint32_t capture_id, uint32_t capture_duration_us, ssd1306_t *disp) {
+void analyze_signal(const uint32_t *buffer, uint32_t word_count, uint32_t capture_id, uint32_t capture_duration_us, double sample_rate, ssd1306_t *disp) {
     uint32_t high_count = 0;
     uint32_t transitions = 0;
     uint32_t pulse_widths[2] = {0, 0}; // [0] - low pulses, [1] - high pulses
@@ -307,8 +308,8 @@ void analyze_signal(const uint32_t *buffer, uint32_t word_count, uint32_t captur
     
     if (transitions > 1) {
         double capture_duration_s;
-        if (g_actual_sample_rate > 0.0) {
-            capture_duration_s = (double)total_samples / g_actual_sample_rate;
+        if (sample_rate > 0.0) {
+            capture_duration_s = (double)total_samples / sample_rate;
         } else {
             capture_duration_s = (double)capture_duration_us / 1e6;
         }
@@ -318,12 +319,12 @@ void analyze_signal(const uint32_t *buffer, uint32_t word_count, uint32_t captur
         char s[10]={0};
 
         sprintf(s, "%.1f KHz", estimated_freq / 1000.0);
-        ssd1306_fill(disp);
+        ssd1306_fill(disp, 1);
         ssd1306_draw_string(disp, 1, 1, 2, s);
         ssd1306_show(disp);
 
-        if (g_actual_sample_rate > 0.0) {
-            printf("(used computed capture duration %.3f ms from sample_rate %.2f Hz)\n", capture_duration_s*1000.0, g_actual_sample_rate);
+        if (sample_rate > 0.0) {
+            printf("(used computed capture duration %.3f ms from sample_rate %.2f Hz)\n", capture_duration_s*1000.0, sample_rate);
         } else {
             printf("(used measured capture duration %.3f ms)\n", (double)capture_duration_us/1000.0);
         }
@@ -386,23 +387,18 @@ int main() {
     setup_uart();
     stdio_uart_init();
 
+    printf("Starting...");
+    printf("System clock set to %lu MHz\n", (unsigned long)(clock_get_hz(clk_sys) / 1000000.));
+
+
     init_i2c_safe();
     ssd1306_t disp;
     disp.external_vcc = false;
     ssd1306_init(&disp, 128, 64, 0x3C, OLED_I2C_PORT);
-    ssd1306_fill(&disp);
+    ssd1306_fill(&disp, 255);
     ssd1306_show(&disp);
 
-    printf("Starting...");
-    printf("System clock set to %lu MHz\n", (unsigned long)(clock_get_hz(clk_sys) / 1000000.));
-
-    PIO pio = setup_logic_analyzer_pio(0, SIGNAL_PIN);
-    
-    // DMA init
-    dma_channel = dma_claim_unused_channel(true);
-    dma_channel_set_irq0_enabled(dma_channel, true);
-    irq_set_exclusive_handler(DMA_IRQ_0, dma_handler);
-    irq_set_enabled(DMA_IRQ_0, true);
+    const double sample_rate = setup_logic_analyzer_pio(0, SIGNAL_PIN);
     
     printf("Configuration:\n");
     printf("  Sample pin: GPIO%d\n", SIGNAL_PIN);
@@ -413,7 +409,8 @@ int main() {
     bool signal_detected = false;
     uint32_t inactive_captures = 0;
 
-     while (true) {
+    sleep_ms(200);
+    while (true) {
         
         capture_count++;
         
@@ -421,7 +418,7 @@ int main() {
         start_capture();
         
         uint32_t capture_start = time_us_32();
-        dma_channel_wait_for_finish_blocking(dma_channel);
+        dma_channel_wait_for_finish_blocking(la_dma_channel);
         uint32_t capture_duration = time_us_32() - capture_start;
         stop_capture();
 
@@ -429,7 +426,7 @@ int main() {
             capture_complete = true;
             words_captured = BUFFER_SIZE;
             samples_captured = BUFFER_SIZE * 32;
-            dma_channel_acknowledge_irq0(dma_channel);
+            dma_channel_acknowledge_irq0(la_dma_channel);
         }
         
         printf("done in %lu us, words_captured %lu\n", capture_duration, words_captured);
@@ -439,14 +436,16 @@ int main() {
             signal_detected = true;
             inactive_captures = 0;
             printf("ACTIVE - ");
-            analyze_signal(sample_buffer, words_captured, capture_count, capture_duration, &disp);
+            analyze_signal(sample_buffer, words_captured, capture_count, capture_duration, sample_rate, &disp);
             set_rgb(0, 0, 127);
 
         } else {
             inactive_captures++;
             printf("NO SIGNAL");
             set_rgb(0, 127, 0);
-            
+            ssd1306_fill(&disp, 0);
+            ssd1306_draw_string(&disp, 1, 1, 2, "No signal!");
+            ssd1306_show(&disp);
             if (inactive_captures % 10 == 0) {
                 printf(" (%lu consecutive no-signal captures)\n", inactive_captures);
             }
