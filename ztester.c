@@ -1,17 +1,17 @@
-#include "hardware/pio.h"
-#include "hardware/clocks.h"
-#include "pico/multicore.h"
-#include "hardware/dma.h"
-#include "hardware/uart.h"
-#include "hardware/i2c.h"
-#include "pico/stdlib.h"
-#include "pico/stdio.h"
-#include "math.h"
-#include "stdio.h"
-#include "ssd1306.h"
+#include <hardware/pio.h>
+#include <hardware/clocks.h>
+#include <pico/multicore.h>
+#include <hardware/dma.h>
+#include <hardware/uart.h>
+#include <hardware/i2c.h>
+#include <pico/stdlib.h>
+#include <pico/stdio.h>
+#include <math.h>
+#include <stdio.h>
 #include <string.h>
 
 #include "ws2812.h"
+#include "ssd1306.h"
 #include "logic_analyzer.pio.h"
 
 // UART
