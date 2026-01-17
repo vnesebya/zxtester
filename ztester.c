@@ -20,10 +20,6 @@
 #include "ws2812.pio.h"
 #endif
 
-#ifdef USING_PIO_COUNTER_PROGRAM
- #include "counter.pio.h"
-#endif // DEBUG
-
 // UART
 #define UART_ID uart0
 #define BAUD_RATE 115200
@@ -31,37 +27,55 @@
 #define UART_RX_PIN 1
 #define DATA_BITS 8
 #define STOP_BITS 1
-#define PARITY    UART_PARITY_NONE
-
+#define PARITY UART_PARITY_NONE
 
 // OLED Configuration
-#define I2C_PORT i2c1
-#define I2C_SDA 6
-#define I2C_SCL 7
+#define OLED_I2C_PORT i2c1
+#define OLED_I2C_SDA 6
+#define OLED_I2C_SCL 7
 
-// RGB
+// OnBoard RGB Led
 #ifdef ONBOARD_RGB
+
 #define IS_RGBW false
 #define NUM_PIXELS 1
 #define WS2812_PIN 16
+
+PIO led = pio1;
+int led_sm;
+uint led_sm_offset;
+
 #endif
 
-struct LedConfig
-{
-    PIO pio;
-    int sm;
-    uint sm_offset;
-} OnBoardLed = {pio1, 0 , 0};
+// Logic Analyzer 
+PIO la_pio = pio0;
+#define SIGNAL_PIN 8
+#define BTN_RIGHT_PIN 28
+#define BTN_LEFT_PIN 29
 
-void set_rgb(uint8_t r, uint8_t g, uint8_t b, struct LedConfig* led) {
+#define BUFFER_SIZE 32768
+
+uint32_t sample_buffer[BUFFER_SIZE];
+
+volatile bool capture_complete = false;
+volatile uint32_t samples_captured = 0;
+volatile uint32_t words_captured = 0;
+volatile uint32_t capture_count = 0;
+int dma_channel;
+
+// Глобальная реальная частота сэмплирования, вычисляемая при инициализации PIO
+double g_actual_sample_rate = 0.0;
+
+
+void set_rgb(uint8_t r, uint8_t g, uint8_t b) {
     uint32_t rgb = ((uint32_t)(r) << 8) |
                    ((uint32_t)(g) << 16) |
                    (uint32_t)(b);
-    pio_sm_put_blocking(led->pio, led->sm, rgb << 8u);
+    pio_sm_put_blocking(led, led_sm, rgb << 8u);
 }
 
 // Function to set HSV color (hue: 0-359, saturation: 0-100, value: 0-100)
-void set_hsv(uint16_t hue, uint8_t sat, uint8_t val, struct LedConfig* led) {
+void set_hsv(uint16_t hue, uint8_t sat, uint8_t val) {
     hue = hue % 360;
     float s = sat / 100.0f;
     float v = val / 100.0f;
@@ -86,100 +100,76 @@ void set_hsv(uint16_t hue, uint8_t sat, uint8_t val, struct LedConfig* led) {
         r = c; g = 0; b = x;
     }
     
-    set_rgb((r + m) * 255, (g + m) * 255, (b + m) * 255, led);
+    set_rgb((r + m) * 255, (g + m) * 255, (b + m) * 255);
 }
 
 // Initialize the WS2812 LED
-void ws2812_init(struct LedConfig* led) {
-    led->sm_offset = pio_add_program(led->pio, &ws2812_program);
-    ws2812_program_init(led->pio, led->sm, led->sm_offset, WS2812_PIN, 800000, IS_RGBW);
+void ws2812_init() {
+    led_sm_offset = pio_add_program(led, &ws2812_program);
+    ws2812_program_init(led, led_sm, led_sm_offset, WS2812_PIN, 800000, IS_RGBW);
 }
 
 // Fade effect
-void fade_effect(struct LedConfig* led) {
+void fade_effect() {
     for (int i = 0; i < 256; i++) {
-        set_rgb(i, 0, 0, led);  // Fade in red
+        set_rgb(i, 0, 0);  // Fade in red
         sleep_ms(5);
     }
     for (int i = 255; i >= 0; i--) {
-        set_rgb(i, 0, 0, led);  // Fade out red
+        set_rgb(i, 0, 0);  // Fade out red
         sleep_ms(5);
     }
 }
 
 // Breathing effect
-void breathing_effect(uint8_t r, uint8_t g, uint8_t b, struct LedConfig* led) {
+void breathing_effect(uint8_t r, uint8_t g, uint8_t b) {
     for (int i = 0; i < 100; i++) {
         float factor = (sin(i * 0.1) + 1) / 2.0f;
-        set_rgb(r * factor, g * factor, b * factor, led);
+        set_rgb(r * factor, g * factor, b * factor);
         sleep_ms(30);
     }
 }
 
 // Color wheel effect
-void color_wheel_effect(struct LedConfig* led) {
+void color_wheel_effect() {
     for (int i = 0; i < 360; i++) {
-        set_hsv(i, 100, 100, led);
+        set_hsv(i, 100, 100);
         sleep_ms(20);
     }
 }
 
 //----- OLEDCH340 driver
 void init_oled() {
-    i2c_init(I2C_PORT, 100 * 1000);
-    set_rgb(0, 127, 0, &OnBoardLed);
+    i2c_init(OLED_I2C_PORT, 100 * 1000);
+    set_rgb(0, 127, 0);
 
-    gpio_set_function(I2C_SDA, GPIO_FUNC_I2C);
-    gpio_set_function(I2C_SCL, GPIO_FUNC_I2C);
-    gpio_pull_up(I2C_SDA);
-    gpio_pull_up(I2C_SCL);
+    gpio_set_function(OLED_I2C_SDA, GPIO_FUNC_I2C);
+    gpio_set_function(OLED_I2C_SCL, GPIO_FUNC_I2C);
+    gpio_pull_up(OLED_I2C_SDA);
+    gpio_pull_up(OLED_I2C_SCL);
 }
 
 void init_i2c_safe() {
     // First, set pins to input to avoid conflicts
-    gpio_init(I2C_SDA);
-    gpio_init(I2C_SCL);
-    gpio_set_dir(I2C_SDA, GPIO_IN);
-    gpio_set_dir(I2C_SCL, GPIO_IN);
+    gpio_init(OLED_I2C_SDA);
+    gpio_init(OLED_I2C_SCL);
+    gpio_set_dir(OLED_I2C_SDA, GPIO_IN);
+    gpio_set_dir(OLED_I2C_SCL, GPIO_IN);
     
     // Initialize I2C with safe speed
-    i2c_init(I2C_PORT, 400000);
+    i2c_init(OLED_I2C_PORT, 400000);
     
     // Set pin functions
-    gpio_set_function(I2C_SDA, GPIO_FUNC_I2C);
-    gpio_set_function(I2C_SCL, GPIO_FUNC_I2C);
+    gpio_set_function(OLED_I2C_SDA, GPIO_FUNC_I2C);
+    gpio_set_function(OLED_I2C_SCL, GPIO_FUNC_I2C);
     
     // Enable pull-ups
-    gpio_pull_up(I2C_SDA);
-    gpio_pull_up(I2C_SCL);
+    gpio_pull_up(OLED_I2C_SDA);
+    gpio_pull_up(OLED_I2C_SCL);
     
     // Brief delay to let I2C stabilize
     sleep_ms(100);
 }
-
-/*
-void i2c_scan() {
-    printf("Scanning I2C bus...\n");
-    
-    for (uint8_t addr = 1; addr < 127; addr++) {
-        if (addr % 16 == 0) printf("\n0x%02x: ", addr);
-        
-        uint8_t rxdata;
-        int ret = i2c_read_blocking(I2C_PORT, addr, &rxdata, 1, false);
-        
-        if (ret == PICO_ERROR_GENERIC) {
-            printf(".. ");
-        } else if (ret == 1) {
-            printf("%02x ", addr);
-        } else {
-            printf("ER ");
-        }
-        sleep_ms(1);
-    }
-    printf("\nScan complete.\n");
-}
-*/
-
 
 void setup_uart() {
     uart_init(UART_ID, BAUD_RATE);
@@ -193,24 +183,6 @@ void setup_uart() {
 }
 
 
-#define SIGNAL_PIN 8
-#define BTN_RIGHT_PIN 28
-#define BTN_LEFT_PIN 29
-
- // GPIO пин для триггера (опциона8ьно)
-#define BUFFER_SIZE 32768       // Размер буфера в 32-битных словах
-//#define SAMPLE_RATE 200000  // Желаемая частота дискретизации (200 kHz)
-// #define SAMPLE_RATE 10000000  // Желаемая частота дискретизации (200 kHz)
-#define CAPTURE_INTERVAL_MS 1000 // Интервал между захватами в мс
-
-
-// Глобальные переменные
-uint32_t sample_buffer[BUFFER_SIZE];
-volatile bool capture_complete = false;
-volatile uint32_t samples_captured = 0;
-volatile uint32_t words_captured = 0;
-volatile uint32_t capture_count = 0;
-int dma_channel;
 
 // Обработчик прерывания DMA
 void dma_handler() {
@@ -223,12 +195,11 @@ void dma_handler() {
     }
 }
 
-PIO setup_logic_analyzer_pio(uint sm, uint pin, PIO pio)  {
-    //PIO pio = pio0;
-    uint offset = pio_add_program(pio, &logic_analyzer_program);
+PIO setup_logic_analyzer_pio(uint sm, uint pin)  {
+    uint offset = pio_add_program(la_pio, &logic_analyzer_program);
     
-    pio_gpio_init(pio, pin);
-    pio_sm_set_consecutive_pindirs(pio, sm, pin, 1, false);
+    pio_gpio_init(la_pio, pin);
+    pio_sm_set_consecutive_pindirs(la_pio, sm, pin, 1, false);
     
     pio_sm_config c = logic_analyzer_program_get_default_config(offset);
     sm_config_set_in_pins(&c, pin);
@@ -248,12 +219,10 @@ PIO setup_logic_analyzer_pio(uint sm, uint pin, PIO pio)  {
     sm_config_set_in_shift(&c, true, true, 32);
     sm_config_set_fifo_join(&c, PIO_FIFO_JOIN_RX);
     
-    pio_sm_init(pio, sm, offset, &c);
-    return pio;
+    pio_sm_init(la_pio, sm, offset, &c);
+    return la_pio;
 }
 
-// Глобальная реальная частота сэмплирования, вычисляемая при инициализации PIO
-double g_actual_sample_rate = 0.0;
 
 // Запуск захвата данных
 void start_capture() {
@@ -411,34 +380,23 @@ int main() {
     stdio_init_all();
     set_sys_clock_hz(200000000, true);
     
-    ws2812_init(&OnBoardLed);
-    set_rgb(127, 0, 0, &OnBoardLed);
+    ws2812_init();
+    set_rgb(127, 0, 0);
 
     setup_uart();
     stdio_uart_init();
 
     init_i2c_safe();
-
-//    sleep_ms(1000); // wait for usb init 
-
-    // display test
     ssd1306_t disp;
     disp.external_vcc = false;
-    ssd1306_init(&disp, 128, 64, 0x3C, I2C_PORT);
+    ssd1306_init(&disp, 128, 64, 0x3C, OLED_I2C_PORT);
     ssd1306_fill(&disp);
-
-    ssd1306_draw_string(&disp, 1, 1, 2, "test");
     ssd1306_show(&disp);
-
-
-    // set_rgb(0, 127, 0);
 
     printf("Starting...");
     printf("System clock set to %lu MHz\n", (unsigned long)(clock_get_hz(clk_sys) / 1000000.));
 
-
-
-    PIO pio = setup_logic_analyzer_pio(0, SIGNAL_PIN, pio0);
+    PIO pio = setup_logic_analyzer_pio(0, SIGNAL_PIN);
     
     // DMA init
     dma_channel = dma_claim_unused_channel(true);
@@ -449,8 +407,6 @@ int main() {
     printf("Configuration:\n");
     printf("  Sample pin: GPIO%d\n", SIGNAL_PIN);
     printf("  Buffer size: %d words (%d samples)\n", BUFFER_SIZE, BUFFER_SIZE * 32);
-    // printf("  Sample rate: %.2f MHz\n", sys_clock_h / 1000000.0);
-    printf("  Capture interval: %d ms\n", CAPTURE_INTERVAL_MS);
     printf("  Starting continuous capture...\n\n");
     
     uint32_t last_capture_time = time_us_32();
@@ -458,10 +414,8 @@ int main() {
     uint32_t inactive_captures = 0;
 
      while (true) {
-        uint32_t current_time = time_us_32();
         
         capture_count++;
-        last_capture_time = current_time;
         
         printf("[%lu] Starting capture... ", capture_count);
         start_capture();
@@ -486,12 +440,12 @@ int main() {
             inactive_captures = 0;
             printf("ACTIVE - ");
             analyze_signal(sample_buffer, words_captured, capture_count, capture_duration, &disp);
-            set_rgb(0, 0, 127, &OnBoardLed);
+            set_rgb(0, 0, 127);
 
         } else {
             inactive_captures++;
             printf("NO SIGNAL");
-            set_rgb(0, 127, 0, &OnBoardLed);
+            set_rgb(0, 127, 0);
             
             if (inactive_captures % 10 == 0) {
                 printf(" (%lu consecutive no-signal captures)\n", inactive_captures);

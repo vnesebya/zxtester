@@ -26,9 +26,9 @@
 
 
 // OLED Configuration
-#define I2C_PORT i2c1
-#define I2C_SDA 6
-#define I2C_SCL 7
+#define OLED_I2C_PORT i2c1
+#define OLED_I2C_SDA 6
+#define OLED_I2C_SCL 7
 
 // RGB
 #ifdef ONBOARD_RGB
@@ -118,32 +118,32 @@ void color_wheel_effect() {
 
 //----- OLEDCH340 driver
 void init_oled() {
-    i2c_init(I2C_PORT, 100 * 1000);
+    i2c_init(OLED_I2C_PORT, 100 * 1000);
     set_rgb(0, 127, 0);
 
-    gpio_set_function(I2C_SDA, GPIO_FUNC_I2C);
-    gpio_set_function(I2C_SCL, GPIO_FUNC_I2C);
-    gpio_pull_up(I2C_SDA);
-    gpio_pull_up(I2C_SCL);
+    gpio_set_function(OLED_I2C_SDA, GPIO_FUNC_I2C);
+    gpio_set_function(OLED_I2C_SCL, GPIO_FUNC_I2C);
+    gpio_pull_up(OLED_I2C_SDA);
+    gpio_pull_up(OLED_I2C_SCL);
 }
 
 void init_i2c_safe() {
     // First, set pins to input to avoid conflicts
-    gpio_init(I2C_SDA);
-    gpio_init(I2C_SCL);
-    gpio_set_dir(I2C_SDA, GPIO_IN);
-    gpio_set_dir(I2C_SCL, GPIO_IN);
+    gpio_init(OLED_I2C_SDA);
+    gpio_init(OLED_I2C_SCL);
+    gpio_set_dir(OLED_I2C_SDA, GPIO_IN);
+    gpio_set_dir(OLED_I2C_SCL, GPIO_IN);
     
     // Initialize I2C with safe speed
-    i2c_init(I2C_PORT, 400000);
+    i2c_init(OLED_I2C_PORT, 400000);
     
     // Set pin functions
-    gpio_set_function(I2C_SDA, GPIO_FUNC_I2C);
-    gpio_set_function(I2C_SCL, GPIO_FUNC_I2C);
+    gpio_set_function(OLED_I2C_SDA, GPIO_FUNC_I2C);
+    gpio_set_function(OLED_I2C_SCL, GPIO_FUNC_I2C);
     
     // Enable pull-ups
-    gpio_pull_up(I2C_SDA);
-    gpio_pull_up(I2C_SCL);
+    gpio_pull_up(OLED_I2C_SDA);
+    gpio_pull_up(OLED_I2C_SCL);
     
     // Brief delay to let I2C stabilize
     sleep_ms(100);
@@ -156,7 +156,7 @@ void i2c_scan() {
         if (addr % 16 == 0) printf("\n0x%02x: ", addr);
         
         uint8_t rxdata;
-        int ret = i2c_read_blocking(I2C_PORT, addr, &rxdata, 1, false);
+        int ret = i2c_read_blocking(OLED_I2C_PORT, addr, &rxdata, 1, false);
         
         if (ret == PICO_ERROR_GENERIC) {
             printf(".. ");
@@ -322,7 +322,7 @@ int main() {
     // display test
     ssd1306_t disp;
     disp.external_vcc = false;
-    ssd1306_init(&disp, 128, 64, 0x3C, I2C_PORT);
+    ssd1306_init(&disp, 128, 64, 0x3C, OLED_I2C_PORT);
     ssd1306_fill(&disp);
 
     ssd1306_draw_string(&disp, 1, 1, 2, "starting...");
