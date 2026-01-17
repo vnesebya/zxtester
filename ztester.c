@@ -127,11 +127,9 @@ double setup_logic_analyzer(uint pin)  {
 }
 
 
-// Запуск захвата данных
 void start_capture() {
     capture_complete = false;
     
-    // Настройка DMA
     dma_channel_config config = dma_channel_get_default_config(la_dma_channel);
     channel_config_set_transfer_data_size(&config, DMA_SIZE_32);
     channel_config_set_read_increment(&config, false);
@@ -147,13 +145,12 @@ void start_capture() {
         true
     );
     
-    // Запуск PIO state machine
+    // run PIO state machine
     pio_sm_clear_fifos(pio0, 0);
     pio_sm_restart(pio0, 0);
     pio_sm_set_enabled(pio0, 0, true);
 }
 
-// Остановка захвата
 void stop_capture() {
     pio_sm_set_enabled(pio0, 0, false);
     if (!capture_complete) {
@@ -162,7 +159,6 @@ void stop_capture() {
 }
 
 // Анализ сигнала - подсчет переходов и статистики
-// capture_duration_us: duration of the capture in microseconds
 void analyze_signal(const uint32_t *buffer, uint32_t word_count, uint32_t capture_id, uint32_t capture_duration_us, double sample_rate, ssd1306_t *disp) {
     uint32_t high_count = 0;
     uint32_t transitions = 0;
