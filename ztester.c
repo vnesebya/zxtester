@@ -192,7 +192,8 @@ void dma_handler() {
 }
 
 // returns real sampling frequency 
-double setup_logic_analyzer_pio(uint sm, uint pin)  {
+double setup_logic_analyzer(uint pin)  {
+    uint sm = 0;
     uint offset = pio_add_program(la_pio, &logic_analyzer_program);
     
     pio_gpio_init(la_pio, pin);
@@ -398,7 +399,7 @@ int main() {
     ssd1306_fill(&disp, 255);
     ssd1306_show(&disp);
 
-    const double sample_rate = setup_logic_analyzer_pio(0, SIGNAL_PIN);
+    const double sample_rate = setup_logic_analyzer(SIGNAL_PIN);
     
     printf("Configuration:\n");
     printf("  Sample pin: GPIO%d\n", SIGNAL_PIN);
