@@ -14,6 +14,7 @@ pico_sdk_init()
 add_executable(${TARGET}
     ztester.c
     ssd1306.c
+	ws2812.c
 )
 
 #pico_enable_stdio_usb(${TARGET} 1)

@@ -1,4 +1,5 @@
-#pragma once
+#ifndef SSD1306_H
+#define SSD1306_H
 
 #include "pico/stdlib.h"
 #include "hardware/i2c.h"
@@ -20,3 +21,5 @@ void ssd1306_draw_pixel(ssd1306_t *disp, uint8_t x, uint8_t y, bool on);
 void ssd1306_draw_string(ssd1306_t *disp, uint8_t x, uint8_t y, uint8_t scale, const char *str);
 void ssd1306_draw_line(ssd1306_t *disp, uint8_t x0, uint8_t y0, uint8_t x1, uint8_t y1, bool on);
 void ssd1306_draw_rect(ssd1306_t *disp, uint8_t x, uint8_t y, uint8_t w, uint8_t h, bool on);
+
+#endif // !SSD1306_H
