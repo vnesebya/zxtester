@@ -20,11 +20,8 @@ add_executable(${TARGET}
 #pico_enable_stdio_usb(${TARGET} 1)
 pico_enable_stdio_uart(${TARGET} 1)
 
-# Add the WS2812 PIO program
-#pico_generate_pio_header(${TARGET} ${CMAKE_CURRENT_LIST_DIR}/ws2812.pio)
-#pico_generate_pio_header(${TARGET} ${CMAKE_CURRENT_LIST_DIR}/counter.pio)
-#pico_generate_pio_header(${TARGET} ${CMAKE_CURRENT_LIST_DIR}/dutycycle.pio)
-pico_generate_pio_header(${TARGET} ${CMAKE_CURRENT_LIST_DIR}/logic_analyzer.pio)
+# Add PIO programs
+pico_generate_pio_header(${TARGET} ${CMAKE_CURRENT_LIST_DIR}/sampler.pio)
 pico_generate_pio_header(${TARGET} ${CMAKE_CURRENT_LIST_DIR}/ws2812.pio)
 
 #define PICO_CLOCK_ADJUST_PERI_CLOCK_WITH_SYS_CLOCK 1

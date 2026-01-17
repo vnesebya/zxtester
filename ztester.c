@@ -23,10 +23,8 @@
 #define STOP_BITS 1
 #define PARITY UART_PARITY_NONE
 
-
 // OnBoard RGB Led
 #define WS2812_PIN 16
-
 ws2812_t ws2812 = {
     .pio = pio1,
     .sm = 0,
@@ -39,7 +37,6 @@ ws2812_t ws2812 = {
 #define OLED_I2C_PORT i2c1
 #define OLED_I2C_SDA 6
 #define OLED_I2C_SCL 7
-
 ssd1306_t disp = {
     .i2c_port = OLED_I2C_PORT,
     .width = 128,
@@ -55,10 +52,8 @@ ssd1306_t disp = {
 #define BTN_RIGHT_PIN 28
 #define BTN_LEFT_PIN 29
 #define BUFFER_SIZE 32768
-
 PIO la_pio = pio0;
 int la_dma_channel;
-
 uint32_t sample_buffer[BUFFER_SIZE];
 volatile bool capture_complete = false;
 
@@ -284,14 +279,13 @@ int main() {
     
     printf("Configuration:\n");
     printf("  Sample pin: GPIO%d\n", SIGNAL_PIN);
+    printf("  Sample rate: %.1f\n", sample_rate);
     printf("  Buffer size: %d words (%d samples)\n", BUFFER_SIZE, BUFFER_SIZE * 32);
     printf("  Starting continuous capture...\n\n");
+    sleep_ms(200);
     
-    uint32_t last_capture_time = time_us_32();
     bool signal_detected = false;
     uint32_t inactive_captures = 0;
-
-    sleep_ms(200);
     uint32_t capture_count = 0;
     while (true) {
         
@@ -339,7 +333,7 @@ int main() {
         
         memset((void*)sample_buffer, 0, BUFFER_SIZE * sizeof(uint32_t));
         
-        sleep_ms(100);
+        //sleep_ms(100);
     }
     
     return 0;
