@@ -1,5 +1,6 @@
 #include "analyzer.h"
 #include <stdint.h>
+#include <stdbool.h>
 
 // Implementation of analyze_signal_buffer moved from ztester.c
 analysis_result_t analyze_signal_buffer(const uint32_t *buffer, uint32_t word_count, double sample_rate) {
@@ -69,4 +70,23 @@ analysis_result_t analyze_signal_buffer(const uint32_t *buffer, uint32_t word_co
     else res.signal_type = SIGNAL_TYPE_UNKNOWN;
 
     return res;
+}
+
+// Detect whether buffer contains any transitions (activity)
+bool detect_signal_activity(const uint32_t *buffer, uint32_t word_count) {
+    uint32_t check_words = word_count;
+    uint8_t last_state = (buffer[0] & 1);
+
+    for (uint32_t i = 0; i < check_words; i++) {
+        uint32_t word = buffer[i];
+
+        for (int bit = 0; bit < 32; bit++) {
+            uint8_t current_state = (word >> bit) & 1;
+            if (current_state != last_state) {
+                return true;
+            }
+            last_state = current_state;
+        }
+    }
+    return false;
 }

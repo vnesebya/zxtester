@@ -56,17 +56,14 @@ sampler_t sampler = {
 void setup_uart(uart_inst_t *uart, uint baudrate, uint tx, uint rx, uint databits, uint stopbits, uart_parity_t parity) {
     uart_init(uart, baudrate);
     
-    gpio_set_function(tx, GPIO_FUNC_UART); // TX
-    gpio_set_function(rx, GPIO_FUNC_UART); // RX
+    gpio_set_function(tx, GPIO_FUNC_UART);
+    gpio_set_function(rx, GPIO_FUNC_UART);
     
     uart_set_format(uart, databits, stopbits, parity);
     
     uart_set_fifo_enabled(uart, true);
 }
 
-// analyze_signal_buffer moved to analyzer.c; types are declared in analyzer.h
-
-// Print analysis_result_t and update OLED as before
 void print_analysis_result(const analysis_result_t * res, uint32_t capture_id) {
     printf("\n=== Capture #%lu ===\n", capture_id);
     printf("Total samples: %lu\n", (unsigned long)res->total_samples);
@@ -114,24 +111,7 @@ void print_analysis_result(const analysis_result_t * res, uint32_t capture_id) {
 }
 
 
-bool detect_signal_activity(const uint32_t *buffer, uint32_t word_count) {
-    // uint32_t check_words = (word_count < 64) ? word_count : 64;
-    uint32_t check_words = word_count;
-    uint8_t last_state = (buffer[0] & 1);
-    
-    for (uint32_t i = 0; i < check_words; i++) {
-        uint32_t word = buffer[i];
-        
-        for (int bit = 0; bit < 32; bit++) {
-            uint8_t current_state = (word >> bit) & 1;
-            if (current_state != last_state) {
-                return true; // Обнаружен переход - есть активность
-            }
-            last_state = current_state;
-        }
-    }
-    return false; // Нет переходов - сигнал постоянный
-}
+// detect_signal_activity moved to analyzer.c
 
 int main() {
     stdio_init_all();

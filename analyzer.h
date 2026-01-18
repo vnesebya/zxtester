@@ -2,6 +2,7 @@
 #define ANALYZER_H
 
 #include <stdint.h>
+#include <stdbool.h>
 
 // signal type enumeration
 typedef enum {
@@ -27,5 +28,8 @@ typedef struct {
 
 // Analyze buffer and return populated result
 analysis_result_t analyze_signal_buffer(const uint32_t *buffer, uint32_t word_count, double sample_rate);
+
+// Detect whether buffer contains any transitions (activity)
+bool detect_signal_activity(const uint32_t *buffer, uint32_t word_count);
 
 #endif // ANALYZER_H
