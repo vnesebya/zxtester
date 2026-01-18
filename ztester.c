@@ -92,8 +92,9 @@ typedef struct {
     signal_type_t signal_type;
 } analysis_result_t;
 
-// Populate analysis_result_t from raw buffer
-void analyze_buffer(const uint32_t *buffer, uint32_t word_count, analysis_result_t *res, double sample_rate) {
+// Populate analysis_result_t from raw buffer (returns result by value)
+analysis_result_t analyze_signal_buffer(const uint32_t *buffer, uint32_t word_count, double sample_rate) {
+    analysis_result_t res = {0};
     uint32_t high_count = 0;
     uint32_t transitions = 0;
     uint32_t pulse_widths[2] = {0, 0};
@@ -105,7 +106,7 @@ void analyze_buffer(const uint32_t *buffer, uint32_t word_count, analysis_result
         uint32_t word = buffer[i];
 
         // store first words for later printing
-        if (i < 10) res->first_words[i] = word;
+        if (i < 10) res.first_words[i] = word;
 
         for (int bit = 0; bit < 32; bit++) {
             current_state = (word >> bit) & 1;
@@ -129,34 +130,36 @@ void analyze_buffer(const uint32_t *buffer, uint32_t word_count, analysis_result
     uint32_t total_samples = word_count * 32;
 
     // fill result
-    res->high_count = high_count;
-    res->transitions = transitions;
-    res->pulse_widths[0] = pulse_widths[0];
-    res->pulse_widths[1] = pulse_widths[1];
-    res->total_samples = total_samples;
-    res->word_count = word_count;
+    res.high_count = high_count;
+    res.transitions = transitions;
+    res.pulse_widths[0] = pulse_widths[0];
+    res.pulse_widths[1] = pulse_widths[1];
+    res.total_samples = total_samples;
+    res.word_count = word_count;
 
     if (transitions > 1) {
-        res->capture_duration_s = (double)total_samples / sample_rate;
-        res->estimated_freq = (transitions / 2.0) / res->capture_duration_s;
+        res.capture_duration_s = (double)total_samples / sample_rate;
+        res.estimated_freq = (transitions / 2.0) / res.capture_duration_s;
     } else {
-        res->capture_duration_s = 0.0;
-        res->estimated_freq = 0.0;
+        res.capture_duration_s = 0.0;
+        res.estimated_freq = 0.0;
     }
 
     if (transitions > 1) {
         double denom = (transitions / 2.0);
-        res->avg_high_pulse = (float)res->pulse_widths[1] / denom;
-        res->avg_low_pulse = (float)res->pulse_widths[0] / denom;
+        res.avg_high_pulse = (float)res.pulse_widths[1] / denom;
+        res.avg_low_pulse = (float)res.pulse_widths[0] / denom;
     } else {
-        res->avg_high_pulse = 0.0f;
-        res->avg_low_pulse = 0.0f;
+        res.avg_high_pulse = 0.0f;
+        res.avg_low_pulse = 0.0f;
     }
 
-    if (transitions == 0) res->signal_type = SIGNAL_TYPE_CONSTANT;
-    else if (transitions == 2 && high_count == total_samples / 2) res->signal_type = SIGNAL_TYPE_PERFECT_SQUARE;
-    else if (transitions >= 4) res->signal_type = SIGNAL_TYPE_PERIODIC;
-    else res->signal_type = SIGNAL_TYPE_UNKNOWN;
+    if (transitions == 0) res.signal_type = SIGNAL_TYPE_CONSTANT;
+    else if (transitions == 2 && high_count == total_samples / 2) res.signal_type = SIGNAL_TYPE_PERFECT_SQUARE;
+    else if (transitions >= 4) res.signal_type = SIGNAL_TYPE_PERIODIC;
+    else res.signal_type = SIGNAL_TYPE_UNKNOWN;
+
+    return res;
 }
 
 // Print analysis_result_t and update OLED as before
@@ -271,8 +274,7 @@ int main() {
             signal_detected = true;
             inactive_captures = 0;
             printf("ACTIVE");
-            analysis_result_t analysis = {0};
-            analyze_buffer(sampler.sample_buffer, BUFFER_SIZE, &analysis, sample_rate);
+            analysis_result_t analysis = analyze_signal_buffer(sampler.sample_buffer, BUFFER_SIZE, sample_rate);
             print_analysis_result(&analysis, capture_count);
             set_rgb(0, 0, 127, &ws2812);
 
