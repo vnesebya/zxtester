@@ -41,7 +41,7 @@ ssd1306_t oled = {
 #define BTN_RIGHT_PIN 28
 #define BTN_LEFT_PIN 29
 
-// Logic Analyzer 
+// Sampler
 #define SIGNAL_PIN 8
 #define BUFFER_SIZE 32768
 
