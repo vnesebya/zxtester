@@ -74,7 +74,7 @@ void start_capture(sampler_t *sampler) {
     pio_sm_set_enabled(sampler->pio, 0, true);
 }
 
-void wait_capture(sampler_t *sampler) {
+void wait_capture_blocking(sampler_t *sampler) {
     dma_channel_wait_for_finish_blocking(dma_channel);
 }
 

@@ -15,42 +15,37 @@
 #include "sampler.pio.h"
 #include "sampler.h"
 
-// UART
-#define UART_ID uart0
-#define BAUD_RATE 115200
-#define UART_TX_PIN 0
-#define UART_RX_PIN 1
-#define DATA_BITS 8
-#define STOP_BITS 1
-#define PARITY UART_PARITY_NONE
+// Debug UART
+#define DBG_UART_ID uart0
+#define DBG_UART_BAUDRATE 115200
+#define DBG_UART_TX_PIN 0
+#define DBG_UART_RX_PIN 1
+#define DBG_UART_DATA_BITS 8
+#define DBG_UART_STOP_BITS 1
+#define DBG_PARITY UART_PARITY_NONE
 
 // OnBoard RGB Led
-#define WS2812_PIN 16
 ws2812_t ws2812 = {
     .pio = pio1,
     .sm = 0,
     .offset = 0,
-    .pin = WS2812_PIN,
+    .pin = 16,
     .rgbw = false
 };
 
 // OLED Configuration
-#define OLED_I2C_PORT i2c1
-#define OLED_I2C_SDA 6
-#define OLED_I2C_SCL 7
-ssd1306_t disp = {
-    .i2c_port = OLED_I2C_PORT,
+ssd1306_t oled = {
+    .i2c_port = i2c1,
     .width = 128,
     .height = 64,
     .address = 0x3C,
     .external_vcc = false,
-    .SCL = OLED_I2C_SCL,
-    .SDA = OLED_I2C_SDA
+    .SCL = 7,
+    .SDA = 6
 };
 
 #define BTN_RIGHT_PIN 28
 #define BTN_LEFT_PIN 29
-
 
 // Logic Analyzer 
 #define SIGNAL_PIN 8
@@ -64,19 +59,19 @@ sampler_t sampler = {
     .buffer_size = BUFFER_SIZE
 };
 
-void setup_uart() {
-    uart_init(UART_ID, BAUD_RATE);
+void setup_uart(uart_inst_t *uart, uint baudrate, uint tx, uint rx, uint databits, uint stopbits, uart_parity_t parity) {
+    uart_init(uart, baudrate);
     
-    gpio_set_function(0, GPIO_FUNC_UART); // TX
-    gpio_set_function(1, GPIO_FUNC_UART); // RX
+    gpio_set_function(tx, GPIO_FUNC_UART); // TX
+    gpio_set_function(rx, GPIO_FUNC_UART); // RX
     
-    uart_set_format(UART_ID, DATA_BITS, STOP_BITS, PARITY);
+    uart_set_format(uart, databits, stopbits, parity);
     
-    uart_set_fifo_enabled(UART_ID, true);
+    uart_set_fifo_enabled(uart, true);
 }
 
 // Анализ сигнала - подсчет переходов и статистики
-void analyze_signal(const uint32_t *buffer, uint32_t word_count, uint32_t capture_id, uint32_t capture_duration_us, double sample_rate, ssd1306_t *disp) {
+void analyze_signal(const uint32_t *buffer, uint32_t word_count, uint32_t capture_id, double sample_rate) {
     uint32_t high_count = 0;
     uint32_t transitions = 0;
     uint32_t pulse_widths[2] = {0, 0}; // [0] - low pulses, [1] - high pulses
@@ -120,27 +115,18 @@ void analyze_signal(const uint32_t *buffer, uint32_t word_count, uint32_t captur
     printf("Transitions: %lu\n", transitions);
     
     if (transitions > 1) {
-        double capture_duration_s;
-        if (sample_rate > 0.0) {
-            capture_duration_s = (double)total_samples / sample_rate;
-        } else {
-            capture_duration_s = (double)capture_duration_us / 1e6;
-        }
+        double capture_duration_s = (double)total_samples / sample_rate;
         double estimated_freq = (transitions / 2.0) / capture_duration_s;
         printf("Estimated frequency: %.0f Hz\n", estimated_freq);
 
         char s[10]={0};
 
         sprintf(s, "%.1f KHz", estimated_freq / 1000.0);
-        ssd1306_fill(disp, 0);
-        ssd1306_draw_string(disp, 1, 1, 2, s);
-        ssd1306_show(disp);
+        ssd1306_fill(&oled, 0);
+        ssd1306_draw_string(&oled, 1, 1, 2, s);
+        ssd1306_show(&oled);
 
-        if (sample_rate > 0.0) {
-            printf("(used computed capture duration %.3f ms from sample_rate %.2f Hz)\n", capture_duration_s*1000.0, sample_rate);
-        } else {
-            printf("(used measured capture duration %.3f ms)\n", (double)capture_duration_us/1000.0);
-        }
+        printf("(used computed capture duration %.3f ms from sample_rate %.2f Hz)\n", capture_duration_s*1000.0, sample_rate);
     }
     
     if (pulse_widths[0] > 0 && pulse_widths[1] > 0) {
@@ -165,7 +151,6 @@ void analyze_signal(const uint32_t *buffer, uint32_t word_count, uint32_t captur
         printf("Signal: Periodic waveform\n");
     }
     
-    printf("Capture duration: %.3f ms\n", (double)capture_duration_us / 1000.0);
     printf("====================\n");
 }
 
@@ -197,15 +182,15 @@ int main() {
     ws2812_init(&ws2812);
     set_rgb(127, 0, 0, &ws2812);
 
-    setup_uart();
+    setup_uart(DBG_UART_ID, DBG_UART_BAUDRATE, DBG_UART_TX_PIN, DBG_UART_RX_PIN, DBG_UART_DATA_BITS, DBG_UART_STOP_BITS, DBG_PARITY);
     stdio_uart_init();
 
     printf("Starting...");
     printf("System clock set to %lu MHz\n", (unsigned long)(clock_get_hz(clk_sys) / 1000000.));
 
-    ssd1306_init(&disp);
-    ssd1306_fill(&disp, 255);
-    ssd1306_show(&disp);
+    ssd1306_init(&oled);
+    ssd1306_fill(&oled, 255);
+    ssd1306_show(&oled);
 
     const double sample_rate = setup_sampler(&sampler);
     
@@ -224,32 +209,27 @@ int main() {
         capture_count++;
         
         printf("[%lu] Starting capture... ", capture_count);
+
         start_capture(&sampler);
-        
-        uint32_t capture_start = time_us_32();
-        wait_capture(&sampler);
-        uint32_t capture_duration = time_us_32() - capture_start;
-
+        wait_capture_blocking(&sampler);
         stop_capture(&sampler);
-
-        
-        printf("done in %lu us, words_captured %lu\n", capture_duration, BUFFER_SIZE);
+         
         bool activity = detect_signal_activity(sampler.sample_buffer, BUFFER_SIZE);
         
         if (activity) {
             signal_detected = true;
             inactive_captures = 0;
             printf("ACTIVE - ");
-            analyze_signal(sampler.sample_buffer, BUFFER_SIZE, capture_count, capture_duration, sample_rate, &disp);
+            analyze_signal(sampler.sample_buffer, BUFFER_SIZE, capture_count, sample_rate);
             set_rgb(0, 0, 127, &ws2812);
 
         } else {
             inactive_captures++;
             printf("NO SIGNAL");
-            set_rgb(0, 127, 0, &ws2812);
-            ssd1306_fill(&disp, 0);
-            ssd1306_draw_string(&disp, 1, 1, 2, "No signal!");
-            ssd1306_show(&disp);
+            set_rgb(0, 96, 0, &ws2812);
+            ssd1306_fill(&oled, 0);
+            ssd1306_draw_string(&oled, 1, 1, 2, "No signal!");
+            ssd1306_show(&oled);
             if (inactive_captures % 10 == 0) {
                 printf(" (%lu consecutive no-signal captures)\n", inactive_captures);
             }
@@ -259,8 +239,6 @@ int main() {
                 signal_detected = false;
             }
         }
-        
-        
         //sleep_ms(100);
     }
     
