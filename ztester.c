@@ -41,7 +41,7 @@ ssd1306_t oled = {
 #define BTN_RIGHT_PIN 28
 #define BTN_LEFT_PIN 29
 
-// Sampler
+// Signal sampler
 #define SIGNAL_PIN 8
 #define BUFFER_SIZE 32768
 
@@ -77,9 +77,12 @@ void print_analysis_result(const analysis_result_t * res, uint32_t capture_id) {
         printf("Estimated frequency: %.0f Hz\n", res->estimated_freq);
 
         char s[16] = {0};
+        char d[16] = {0};
         sprintf(s, "%.1f KHz", res->estimated_freq / 1000.0);
+        sprintf(d, "Duty %.1f%%", res->duty_cycle);
         ssd1306_fill(&oled, 0);
-        ssd1306_draw_string(&oled, 1, 1, 2, s);
+        ssd1306_draw_string(&oled, 1, 1, 3, s);
+        ssd1306_draw_string(&oled, 1, 24, 2, d);
         ssd1306_show(&oled);
 
         printf("(used computed capture duration %.3f ms from sample_rate %.2f Hz)\n", res->capture_duration_s * 1000.0, (double)(res->total_samples) / res->capture_duration_s);
@@ -89,6 +92,8 @@ void print_analysis_result(const analysis_result_t * res, uint32_t capture_id) {
         printf("Average high pulse: %.2f samples\n", res->avg_high_pulse);
         printf("Average low pulse: %.2f samples\n", res->avg_low_pulse);
     }
+
+    printf("Duty cycle: %.1f%%\n", res->duty_cycle);
 
     printf("First 10 words (LSB first):\n");
     for (int i = 0; i < 10 && i < (int)res->word_count; i++) {
@@ -109,9 +114,6 @@ void print_analysis_result(const analysis_result_t * res, uint32_t capture_id) {
 
     printf("====================\n");
 }
-
-
-// detect_signal_activity moved to analyzer.c
 
 int main() {
     stdio_init_all();
@@ -159,6 +161,7 @@ int main() {
             inactive_captures = 0;
             printf("ACTIVE");
             analysis_result_t analysis = analyze_signal_buffer(sampler.sample_buffer, BUFFER_SIZE, sample_rate);
+
             print_analysis_result(&analysis, capture_count);
             set_rgb(0, 0, 127, &ws2812);
 

@@ -43,6 +43,12 @@ analysis_result_t analyze_signal_buffer(const uint32_t *buffer, uint32_t word_co
     res.pulse_widths[1] = pulse_widths[1];
     res.total_samples = total_samples;
     res.word_count = word_count;
+    // compute duty cycle (% of HIGH samples)
+    if (total_samples > 0) {
+        res.duty_cycle = ((float)high_count / (float)total_samples) * 100.0f;
+    } else {
+        res.duty_cycle = 0.0f;
+    }
 
     if (transitions > 1) {
         res.capture_duration_s = (double)total_samples / sample_rate;
@@ -67,6 +73,25 @@ analysis_result_t analyze_signal_buffer(const uint32_t *buffer, uint32_t word_co
     else res.signal_type = SIGNAL_TYPE_UNKNOWN;
 
     return res;
+}
+
+float calculate_duty_cycle(const uint32_t *buffer, uint32_t word_count) {
+    if (!buffer || word_count == 0) return 0.0f;
+    uint64_t high_count = 0;
+    for (uint32_t i = 0; i < word_count; i++) {
+        uint32_t w = buffer[i];
+        // popcount for speed if available
+#if defined(__GNUC__)
+        high_count += __builtin_popcount(w);
+#else
+        for (int b = 0; b < 32; b++) {
+            high_count += (w >> b) & 1u;
+        }
+#endif
+    }
+    uint64_t total = (uint64_t)word_count * 32ull;
+    if (total == 0) return 0.0f;
+    return ((float)high_count / (float)total) * 100.0f;
 }
 
 bool detect_signal_activity(const uint32_t *buffer, uint32_t word_count) {

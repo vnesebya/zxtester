@@ -24,6 +24,7 @@ typedef struct {
     float avg_low_pulse;
     uint32_t first_words[10];
     uint32_t word_count;
+    float duty_cycle; // duty cycle in percent (0.0 - 100.0)
     signal_type_t signal_type;
 } analysis_result_t;
 
@@ -32,5 +33,8 @@ analysis_result_t analyze_signal_buffer(const uint32_t *buffer, uint32_t word_co
 
 // Detect whether buffer contains any transitions (activity)
 bool detect_signal_activity(const uint32_t *buffer, uint32_t word_count);
+
+// Calculate duty cycle (percentage of HIGH samples) from the raw buffer
+float calculate_duty_cycle(const uint32_t *buffer, uint32_t word_count);
 
 #endif // ANALYZER_H

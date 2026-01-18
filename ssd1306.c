@@ -69,7 +69,7 @@ void ssd1306_init(ssd1306_t *disp) {
     
     // Clear display
     for (int i = 0; i < sizeof(disp->buffer); i++) {
-        disp->buffer[i] = 1;
+        disp->buffer[i] = 0;
     }
 }
 
