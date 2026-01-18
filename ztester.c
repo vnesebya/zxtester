@@ -34,8 +34,8 @@ ssd1306_t oled = {
     .height = 64,
     .address = 0x3C,
     .external_vcc = false,
+    .SDA = 6,
     .SCL = 7,
-    .SDA = 6
 };
 
 #define BTN_RIGHT_PIN 28
