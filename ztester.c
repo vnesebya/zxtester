@@ -1,19 +1,13 @@
-#include <hardware/pio.h>
-#include <hardware/clocks.h>
-#include <pico/multicore.h>
-#include <hardware/dma.h>
 #include <hardware/uart.h>
-#include <hardware/i2c.h>
 #include <pico/stdlib.h>
 #include <pico/stdio.h>
-#include <math.h>
 #include <stdio.h>
 #include <string.h>
 
 #include "ws2812.h"
 #include "ssd1306.h"
-#include "sampler.pio.h"
 #include "sampler.h"
+#include "analyzer.h"
 
 // Debug UART
 #define DBG_UART_ID uart0
@@ -70,97 +64,7 @@ void setup_uart(uart_inst_t *uart, uint baudrate, uint tx, uint rx, uint databit
     uart_set_fifo_enabled(uart, true);
 }
 
-// signal type enumeration
-typedef enum {
-    SIGNAL_TYPE_UNKNOWN = 0,
-    SIGNAL_TYPE_CONSTANT,
-    SIGNAL_TYPE_PERFECT_SQUARE,
-    SIGNAL_TYPE_PERIODIC
-} signal_type_t;
-
-typedef struct {
-    uint32_t high_count;
-    uint32_t transitions;
-    uint32_t pulse_widths[2]; // [0] low, [1] high (sum of lengths)
-    uint32_t total_samples;
-    double capture_duration_s;
-    double estimated_freq;
-    float avg_high_pulse;
-    float avg_low_pulse;
-    uint32_t first_words[10];
-    uint32_t word_count;
-    signal_type_t signal_type;
-} analysis_result_t;
-
-// Populate analysis_result_t from raw buffer (returns result by value)
-analysis_result_t analyze_signal_buffer(const uint32_t *buffer, uint32_t word_count, double sample_rate) {
-    analysis_result_t res = {0};
-    uint32_t high_count = 0;
-    uint32_t transitions = 0;
-    uint32_t pulse_widths[2] = {0, 0};
-    uint32_t current_pulse_length = 0;
-    uint8_t last_state = (buffer[0] & 1);
-    uint8_t current_state;
-
-    for (uint32_t i = 0; i < word_count; i++) {
-        uint32_t word = buffer[i];
-
-        // store first words for later printing
-        if (i < 10) res.first_words[i] = word;
-
-        for (int bit = 0; bit < 32; bit++) {
-            current_state = (word >> bit) & 1;
-
-            if (current_state) high_count++;
-
-            if (current_state != last_state) {
-                transitions++;
-                pulse_widths[last_state] += current_pulse_length;
-                current_pulse_length = 1;
-                last_state = current_state;
-            } else {
-                current_pulse_length++;
-            }
-        }
-    }
-
-    // add last pulse
-    pulse_widths[last_state] += current_pulse_length;
-
-    uint32_t total_samples = word_count * 32;
-
-    // fill result
-    res.high_count = high_count;
-    res.transitions = transitions;
-    res.pulse_widths[0] = pulse_widths[0];
-    res.pulse_widths[1] = pulse_widths[1];
-    res.total_samples = total_samples;
-    res.word_count = word_count;
-
-    if (transitions > 1) {
-        res.capture_duration_s = (double)total_samples / sample_rate;
-        res.estimated_freq = (transitions / 2.0) / res.capture_duration_s;
-    } else {
-        res.capture_duration_s = 0.0;
-        res.estimated_freq = 0.0;
-    }
-
-    if (transitions > 1) {
-        double denom = (transitions / 2.0);
-        res.avg_high_pulse = (float)res.pulse_widths[1] / denom;
-        res.avg_low_pulse = (float)res.pulse_widths[0] / denom;
-    } else {
-        res.avg_high_pulse = 0.0f;
-        res.avg_low_pulse = 0.0f;
-    }
-
-    if (transitions == 0) res.signal_type = SIGNAL_TYPE_CONSTANT;
-    else if (transitions == 2 && high_count == total_samples / 2) res.signal_type = SIGNAL_TYPE_PERFECT_SQUARE;
-    else if (transitions >= 4) res.signal_type = SIGNAL_TYPE_PERIODIC;
-    else res.signal_type = SIGNAL_TYPE_UNKNOWN;
-
-    return res;
-}
+// analyze_signal_buffer moved to analyzer.c; types are declared in analyzer.h
 
 // Print analysis_result_t and update OLED as before
 void print_analysis_result(const analysis_result_t * res, uint32_t capture_id) {
@@ -211,7 +115,6 @@ void print_analysis_result(const analysis_result_t * res, uint32_t capture_id) {
 
 
 bool detect_signal_activity(const uint32_t *buffer, uint32_t word_count) {
-    // Проверяем первые 64 слова на наличие переходов
     // uint32_t check_words = (word_count < 64) ? word_count : 64;
     uint32_t check_words = word_count;
     uint8_t last_state = (buffer[0] & 1);

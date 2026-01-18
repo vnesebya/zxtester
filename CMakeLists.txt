@@ -16,6 +16,7 @@ add_executable(${TARGET}
     ssd1306.c
 	ws2812.c
 	sampler.c
+	analyzer.c
 )
 
 #pico_enable_stdio_usb(${TARGET} 1)
