@@ -69,6 +69,10 @@ void print_analysis_result(const analysis_result_t * res, uint32_t capture_id, c
     printf("Total samples: %lu\n", (unsigned long)res->total_samples);
     printf("High samples: %lu (%.1f%%)\n", (unsigned long)res->high_count,
            (res->high_count * 100.0) / res->total_samples);
+
+    printf("Avg low length: %.1f, Avg high length: %.1f\n", res->avg_low_pulse, res->avg_high_pulse);
+
+           
     printf("Low samples: %lu (%.1f%%)\n", (unsigned long)(res->total_samples - res->high_count),
            ((res->total_samples - res->high_count) * 100.0) / res->total_samples);
     printf("Transitions: %lu\n", (unsigned long)res->transitions);
@@ -96,15 +100,13 @@ void print_analysis_result(const analysis_result_t * res, uint32_t capture_id, c
 
     // Reduced 32-bit pattern (remove spikes) and display
     uint8_t reduced[32] = {0};
-    uint32_t reduced_count = reduce_buffer_to_32(buffer, res->word_count, reduced);
-    printf("Reduced (%u): ", reduced_count);
+    reduce_buffer_to_32(buffer, res->word_count, reduced);
     char bits[40] = {0};
-    for (uint32_t i = 0; i < reduced_count; i++) {
+    for (uint32_t i = 0; i < 32; i++) {
         bits[i] = reduced[i] ? '-' : '_';
         putchar(bits[i]);
     }
     putchar('\n');
-    bits[reduced_count] = '\0';
     ssd1306_draw_string(&oled, 1, 40, 2, bits);
     ssd1306_show(&oled);
 

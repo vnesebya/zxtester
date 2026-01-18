@@ -37,10 +37,6 @@ bool detect_signal_activity(const uint32_t *buffer, uint32_t word_count);
 // Calculate duty cycle (percentage of HIGH samples) from the raw buffer
 float calculate_duty_cycle(const uint32_t *buffer, uint32_t word_count);
 
-// Reduce raw sample buffer to up to 32 logical samples (0/1).
-// - `out` must point to a 32-byte array to receive 0/1 values.
-// - Returns number of elements written into `out` (<=32).
-// - Short spikes are removed by merging runs shorter than (median_run_length/10).
-uint32_t reduce_buffer_to_32(const uint32_t *buffer, uint32_t word_count, uint8_t out[32]);
+void reduce_buffer_to_32(const uint32_t *buffer, uint32_t word_count, uint8_t out[32]);
 
 #endif // ANALYZER_H

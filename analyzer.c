@@ -9,6 +9,7 @@ analysis_result_t analyze_signal_buffer(const uint32_t *buffer, uint32_t word_co
     uint32_t high_count = 0;
     uint32_t transitions = 0;
     uint32_t pulse_widths[2] = {0, 0};
+    uint32_t pulse_counts[2] = {0, 0};
     uint32_t current_pulse_length = 0;
     uint8_t last_state = (buffer[0] & 1);
     uint8_t current_state;
@@ -26,6 +27,7 @@ analysis_result_t analyze_signal_buffer(const uint32_t *buffer, uint32_t word_co
             if (current_state != last_state) {
                 transitions++;
                 pulse_widths[last_state] += current_pulse_length;
+                pulse_counts[last_state]++;
                 current_pulse_length = 1;
                 last_state = current_state;
             } else {
@@ -36,6 +38,7 @@ analysis_result_t analyze_signal_buffer(const uint32_t *buffer, uint32_t word_co
 
     // add last pulse
     pulse_widths[last_state] += current_pulse_length;
+    pulse_counts[last_state]++;
 
     uint32_t total_samples = word_count * 32;
 
@@ -60,14 +63,11 @@ analysis_result_t analyze_signal_buffer(const uint32_t *buffer, uint32_t word_co
         res.estimated_freq = 0.0;
     }
 
-    if (transitions > 1) {
-        double denom = (transitions / 2.0);
-        res.avg_high_pulse = (float)res.pulse_widths[1] / denom;
-        res.avg_low_pulse = (float)res.pulse_widths[0] / denom;
-    } else {
-        res.avg_high_pulse = 0.0f;
-        res.avg_low_pulse = 0.0f;
-    }
+    // compute average pulse widths per pulse (in samples)
+    if (pulse_counts[1] > 0) res.avg_high_pulse = (float)res.pulse_widths[1] / (float)pulse_counts[1];
+    else res.avg_high_pulse = 0.0f;
+    if (pulse_counts[0] > 0) res.avg_low_pulse = (float)res.pulse_widths[0] / (float)pulse_counts[0];
+    else res.avg_low_pulse = 0.0f;
 
     if (transitions == 0) res.signal_type = SIGNAL_TYPE_CONSTANT;
     else if (transitions == 2 && high_count == total_samples / 2) res.signal_type = SIGNAL_TYPE_PERFECT_SQUARE;
@@ -121,112 +121,11 @@ static inline uint8_t get_sample_bit(const uint32_t *buffer, uint32_t sample_ind
     return (buffer[word_idx] >> bit) & 1u;
 }
 
-uint32_t reduce_buffer_to_32(const uint32_t *buffer, uint32_t word_count, uint8_t out[32]) {
-    if (!buffer || word_count == 0 || !out) return 0;
+void reduce_buffer_to_32(const uint32_t *buffer, uint32_t word_count, uint8_t out[32]) {
+    uint8_t first = get_sample_bit(buffer, 0);
 
-    uint32_t total_samples = word_count * 32u;
-    if (total_samples == 0) return 0;
-
-    // count transitions across whole buffer
-    uint8_t last = get_sample_bit(buffer, 0);
-    uint32_t transitions = 0;
-    for (uint32_t i = 1; i < total_samples; i++) {
+    for (uint32_t i = 1; i < word_count * 32; i++) {
         uint8_t cur = get_sample_bit(buffer, i);
-        if (cur != last) {
-            transitions++;
-            last = cur;
-        }
     }
 
-    if (transitions == 0) {
-        // constant signal, single value
-        out[0] = get_sample_bit(buffer, 0);
-        return 1;
-    }
-
-    // compute spike threshold: runs shorter than this (in samples) are considered spikes
-    // defined as ~period/10. Using transitions we derive samples_per_period = (2*total_samples)/transitions
-    // so spike_thresh = samples_per_period/10 = total_samples/(5*transitions)
-    uint32_t spike_thresh = (transitions > 0) ? (total_samples / (5u * transitions)) : 1u;
-    if (spike_thresh < 1) spike_thresh = 1u;
-
-    // Build run-length list
-    // dynamic array via malloc, grow as needed
-    typedef struct { uint8_t v; uint32_t len; } run_t;
-    uint32_t cap = 256;
-    run_t *runs = (run_t *)malloc(sizeof(run_t) * cap);
-    if (!runs) return 0;
-    uint32_t runs_count = 0;
-
-    uint32_t idx = 0;
-    uint8_t curv = get_sample_bit(buffer, 0);
-    uint32_t curlen = 1;
-    for (idx = 1; idx < total_samples; idx++) {
-        uint8_t b = get_sample_bit(buffer, idx);
-        if (b == curv) curlen++;
-        else {
-            if (runs_count + 1 >= cap) {
-                uint32_t ncap = cap * 2;
-                run_t *nr = (run_t *)realloc(runs, sizeof(run_t) * ncap);
-                if (!nr) break; // out of memory, stop building
-                runs = nr; cap = ncap;
-            }
-            runs[runs_count].v = curv;
-            runs[runs_count].len = curlen;
-            runs_count++;
-            curv = b;
-            curlen = 1;
-        }
-    }
-    // append last run
-    if (runs_count + 1 >= cap) {
-        run_t *nr = (run_t *)realloc(runs, sizeof(run_t) * (cap + 1));
-        if (nr) { runs = nr; cap = cap + 1; }
-    }
-    runs[runs_count].v = curv;
-    runs[runs_count].len = curlen;
-    runs_count++;
-
-    // Merge short runs (spikes) into largest neighbor
-    bool changed = true;
-    while (changed) {
-        changed = false;
-        if (runs_count <= 1) break;
-        for (uint32_t i = 0; i < runs_count; i++) {
-            if (runs[i].len < spike_thresh) {
-                if (i == 0) {
-                    // merge into next
-                    runs[1].len += runs[0].len;
-                    // remove 0
-                    memmove(&runs[0], &runs[1], sizeof(run_t) * (runs_count - 1));
-                    runs_count--;
-                } else if (i == runs_count - 1) {
-                    // merge into previous
-                    runs[i-1].len += runs[i].len;
-                    runs_count--;
-                } else {
-                    // merge into larger neighbor
-                    if (runs[i-1].len >= runs[i+1].len) {
-                        runs[i-1].len += runs[i].len;
-                        // remove runs[i]
-                        memmove(&runs[i], &runs[i+1], sizeof(run_t) * (runs_count - i - 1));
-                        runs_count--;
-                    } else {
-                        runs[i+1].len += runs[i].len;
-                        memmove(&runs[i], &runs[i+1], sizeof(run_t) * (runs_count - i - 1));
-                        runs_count--;
-                    }
-                }
-                changed = true;
-                break; // restart scan
-            }
-        }
-    }
-
-    // fill output with first up to 32 run values
-    uint32_t out_count = (runs_count < 32u) ? runs_count : 32u;
-    for (uint32_t i = 0; i < out_count; i++) out[i] = runs[i].v;
-
-    free(runs);
-    return out_count;
 }
