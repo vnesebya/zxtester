@@ -64,7 +64,7 @@ void setup_uart(uart_inst_t *uart, uint baudrate, uint tx, uint rx, uint databit
     uart_set_fifo_enabled(uart, true);
 }
 
-void print_analysis_result(const analysis_result_t * res, uint32_t capture_id) {
+void print_analysis_result(const analysis_result_t * res, uint32_t capture_id, const uint32_t *buffer, double sample_rate) {
     printf("\n=== Capture #%lu ===\n", capture_id);
     printf("Total samples: %lu\n", (unsigned long)res->total_samples);
     printf("High samples: %lu (%.1f%%)\n", (unsigned long)res->high_count,
@@ -73,6 +73,7 @@ void print_analysis_result(const analysis_result_t * res, uint32_t capture_id) {
            ((res->total_samples - res->high_count) * 100.0) / res->total_samples);
     printf("Transitions: %lu\n", (unsigned long)res->transitions);
 
+    ssd1306_fill(&oled, 0);
     if (res->transitions > 1) {
         printf("Estimated frequency: %.0f Hz\n", res->estimated_freq);
 
@@ -80,10 +81,8 @@ void print_analysis_result(const analysis_result_t * res, uint32_t capture_id) {
         char d[16] = {0};
         sprintf(s, "%.1f KHz", res->estimated_freq / 1000.0);
         sprintf(d, "Duty %.1f%%", res->duty_cycle);
-        ssd1306_fill(&oled, 0);
         ssd1306_draw_string(&oled, 1, 1, 3, s);
         ssd1306_draw_string(&oled, 1, 24, 2, d);
-        ssd1306_show(&oled);
 
         printf("(used computed capture duration %.3f ms from sample_rate %.2f Hz)\n", res->capture_duration_s * 1000.0, (double)(res->total_samples) / res->capture_duration_s);
     }
@@ -94,6 +93,20 @@ void print_analysis_result(const analysis_result_t * res, uint32_t capture_id) {
     }
 
     printf("Duty cycle: %.1f%%\n", res->duty_cycle);
+
+    // Reduced 32-bit pattern (remove spikes) and display
+    uint8_t reduced[32] = {0};
+    uint32_t reduced_count = reduce_buffer_to_32(buffer, res->word_count, reduced);
+    printf("Reduced (%u): ", reduced_count);
+    char bits[40] = {0};
+    for (uint32_t i = 0; i < reduced_count; i++) {
+        bits[i] = reduced[i] ? '-' : '_';
+        putchar(bits[i]);
+    }
+    putchar('\n');
+    bits[reduced_count] = '\0';
+    ssd1306_draw_string(&oled, 1, 40, 2, bits);
+    ssd1306_show(&oled);
 
     printf("First 10 words (LSB first):\n");
     for (int i = 0; i < 10 && i < (int)res->word_count; i++) {
@@ -162,8 +175,9 @@ int main() {
             printf("ACTIVE");
             analysis_result_t analysis = analyze_signal_buffer(sampler.sample_buffer, BUFFER_SIZE, sample_rate);
 
-            print_analysis_result(&analysis, capture_count);
+            print_analysis_result(&analysis, capture_count, sampler.sample_buffer, sample_rate);
             set_rgb(0, 0, 127, &ws2812);
+
 
         } else {
             inactive_captures++;
