@@ -1,4 +1,4 @@
-#How to build using pico-sdk
+# How to build using pico-sdk
 
 ```bash
 git clone -b master https://github.com/raspberrypi/pico-sdk.git
