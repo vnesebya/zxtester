@@ -115,13 +115,35 @@ void print_analysis_result(const analysis_result_t * res, uint32_t capture_id, c
     printf("\n");
 
 
-    char bits[40] = {0};
-    for (uint32_t i = 0; i < 32; i++) {
+    char bits[33] = {0};
+    for (uint32_t i = 0; i < 16; i++) {
         bits[i] = reduced[i] ? '-' : '_';
         putchar(bits[i]);
+        
+        if (reduced[i]) {
+
+            
+            ssd_draw_fullpixel(&oled, i*8, 46, true);
+            ssd_draw_fullpixel(&oled, i*8 + 1, 46, true);
+            ssd_draw_fullpixel(&oled, i*8 + 2, 46, true);
+            ssd_draw_fullpixel(&oled, i*8 + 3, 46, true);
+            ssd_draw_fullpixel(&oled, i*8 + 4, 46, true);
+            ssd_draw_fullpixel(&oled, i*8 + 5, 46, true);
+            ssd_draw_fullpixel(&oled, i*8 + 6, 46, true);
+            ssd_draw_fullpixel(&oled, i*8 + 7, 46, true);
+        } else {
+            ssd_draw_fullpixel(&oled, i*8, 56, true);
+            ssd_draw_fullpixel(&oled, i*8 + 1, 56, true);
+            ssd_draw_fullpixel(&oled, i*8 + 2, 56, true);
+            ssd_draw_fullpixel(&oled, i*8 + 3, 56, true);
+            ssd_draw_fullpixel(&oled, i*8 + 4, 56, true);
+            ssd_draw_fullpixel(&oled, i*8 + 5, 56, true);
+            ssd_draw_fullpixel(&oled, i*8 + 6, 56, true);
+            ssd_draw_fullpixel(&oled, i*8 + 7, 56, true);
+        }
     }
     putchar('\n');
-    ssd1306_draw_string(&oled, 1, 40, bits);
+    // ssd1306_draw_string(&oled, 1, 40, bits);
     ssd1306_show(&oled);
 
     printf("First 10 words (LSB first):\n");

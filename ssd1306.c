@@ -125,11 +125,20 @@ void ssd1306_draw_char(ssd1306_t *disp, uint8_t x, uint8_t y, char c) {
                 ssd1306_draw_pixel(disp, sx,     sy,     true);
                 ssd1306_draw_pixel(disp, sx + 1, sy,     true);
                 ssd1306_draw_pixel(disp, sx,     sy + 1, true);
-                ssd1306_draw_pixel(disp, sx + 1, sy + 1, true);
-            }
+                ssd1306_draw_pixel(disp, sx + 1, sy + 1, true);            }
             line >>= 1;
         }
     }
+}
+
+void ssd_draw_fullpixel(ssd1306_t *disp, uint8_t x, uint8_t y, bool on)
+{
+    uint8_t sx = x;
+    uint8_t sy = y;
+    ssd1306_draw_pixel(disp, sx, sy, true);
+    ssd1306_draw_pixel(disp, sx + 1, sy, true);
+    ssd1306_draw_pixel(disp, sx, sy + 1, true);
+    ssd1306_draw_pixel(disp, sx + 1, sy + 1, true);
 }
 
 void ssd1306_draw_string(ssd1306_t *disp, uint8_t x, uint8_t y, const char *str) {
