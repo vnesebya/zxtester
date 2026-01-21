@@ -1,7 +1,6 @@
 #include "sampler.h"
 
 #include "sampler.pio.h"
-#include <stdio.h>
 #include <string.h>
 
 int dma_channel;
@@ -34,7 +33,7 @@ double setup_sampler(sampler_t *sampler)  {
 
     double achieved_sm_clock = (double)clock_get_hz(clk_sys) / (double)div;
     double achieved_sample_rate = achieved_sm_clock / (double)cycles_per_sample;
-    printf("PIO clkdiv=%.6f, SM clock=%.0f Hz, sample_rate=%.2f Hz\n", div, achieved_sm_clock, achieved_sample_rate);
+    // printf("PIO clkdiv=%.6f, SM clock=%.0f Hz, sample_rate=%.2f Hz\n", div, achieved_sm_clock, achieved_sample_rate);
     
     // Shift register
     sm_config_set_in_shift(&c, true, true, 32);
