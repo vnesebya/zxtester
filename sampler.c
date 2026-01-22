@@ -27,22 +27,18 @@ double setup_sampler(sampler_t *sampler)  {
     pio_sm_config c = sampler_program_get_default_config(offset);
     sm_config_set_in_pins(&c, sampler->pin);
     
-//    const float cycles_per_sample = 2.03125f; // !
-    const float cycles_per_sample = 1.0f; // !
-    float div = 1.0; // sampling as fast as we can 
+    const float cycles_per_sample = 1.0f; 
+    float div = 4.0; // sampling as fast as we can 
     sm_config_set_clkdiv(&c, div);
 
     double achieved_sm_clock = (double)clock_get_hz(clk_sys) / (double)div;
     double achieved_sample_rate = achieved_sm_clock / (double)cycles_per_sample;
-    // printf("PIO clkdiv=%.6f, SM clock=%.0f Hz, sample_rate=%.2f Hz\n", div, achieved_sm_clock, achieved_sample_rate);
     
-    // Shift register
     sm_config_set_in_shift(&c, true, true, 32);
     sm_config_set_fifo_join(&c, PIO_FIFO_JOIN_RX);
     
     pio_sm_init(sampler->pio, sm, offset, &c);
 
-    // DMA init
     dma_channel = dma_claim_unused_channel(true);
     dma_channel_set_irq0_enabled(dma_channel, true);
     irq_set_exclusive_handler(DMA_IRQ_0, dma_handler);
@@ -67,13 +63,14 @@ void start_capture(sampler_t *sampler) {
         sampler->sample_buffer,
         &sampler->pio->rxf[0],
         sampler->buffer_size,
-        true
+        false
     );
     
     // run PIO state machine
     pio_sm_clear_fifos(sampler->pio, 0);
     pio_sm_restart(sampler->pio, 0);
     pio_sm_set_enabled(sampler->pio, 0, true);
+    dma_channel_start(dma_channel);
 }
 
 void wait_capture_blocking(sampler_t *sampler) {
