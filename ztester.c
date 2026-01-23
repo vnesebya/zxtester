@@ -8,6 +8,7 @@
 #include "ssd1306.h"
 #include "sampler.h"
 #include "analyzer.h"
+#include "units.h"
 
 // Debug UART
 #define DBG_UART_ID uart0
@@ -83,7 +84,9 @@ void print_analysis_result(const analysis_result_t * res, uint32_t capture_id, c
 
         char s[16] = {0};
         char d[16] = {0};
-        sprintf(s, "%.3f KHz", res->estimated_freq / 1000.0);
+        // sprintf(s, "%.3f KHz", res->estimated_freq / 1000.0);
+        printFreq (s, res->estimated_freq);
+
         sprintf(d, "Duty %.1f%%", res->duty_cycle);
         ssd1306_draw_string(&oled, 1, 1, s);
         ssd1306_draw_string(&oled, 1, 24, d);
@@ -120,14 +123,14 @@ void print_analysis_result(const analysis_result_t * res, uint32_t capture_id, c
     uint32_t display_samples = 16;
     uint32_t sample_width = oled.width / display_samples;
 
-    uint16_t zero_y = 63;
+    uint16_t zero_y = 62;
     uint16_t one_y = 46;
     uint16_t sample_height = zero_y - one_y;
     reduce_t last_val = reduced[0];
     uint16_t cursor = 0;
 
-    uint16_t zero_width = (1.0 - (res->duty_cycle / 100.0)) * sample_width * 2.0;
-    uint16_t one_width = (res->duty_cycle / 100.0) * sample_width * 2.0;
+    uint16_t zero_width = (1.0 - (res->duty_cycle / 100.0)) * sample_width * 4.0;
+    uint16_t one_width = (res->duty_cycle / 100.0) * sample_width * 4.0;
     // uint16_t zero_width = (1.0 - (res->duty_cycle / 100.0)) * sample_width;
     // uint16_t one_width = (res->duty_cycle / 100.0) * sample_width;
 
@@ -135,27 +138,27 @@ void print_analysis_result(const analysis_result_t * res, uint32_t capture_id, c
 
         if (last_val != reduced[i]) {
             for (int n = one_y; n < zero_y; ++n)
-                ssd_draw_fullpixel(&oled, cursor, n, true);
+                ssd_draw_fullpixel(&oled, cursor, n, true, 1);
         }
         
         switch (reduced[i]) {
             case reduced_one: {
                 for (int n = 0; n < one_width; ++n)
-                    ssd_draw_fullpixel(&oled, cursor + n, one_y, true);
+                    ssd_draw_fullpixel(&oled, cursor + n, one_y, true, 1);
                 cursor += one_width;    
                 last_val = reduced[i];
             } break;
             
             case reduced_zero: {
                 for (int n = 0; n < zero_width; ++n)
-                    ssd_draw_fullpixel(&oled, cursor + n, zero_y, true);
+                    ssd_draw_fullpixel(&oled, cursor + n, zero_y, true, 1);
                 cursor += zero_width;    
                 last_val = reduced[i];
             } break;
 
             case reduced_pin: {
                 for (int n = one_y; n < zero_y; ++n)
-                    ssd_draw_fullpixel(&oled, cursor, n, true);
+                    ssd_draw_fullpixel(&oled, cursor, n, true, 1);
                 cursor += 1;    
             } break;
         }
@@ -225,7 +228,7 @@ int main() {
         start_capture(&sampler);
         wait_capture_blocking(&sampler);
         stop_capture(&sampler);
-         
+        
         bool activity = detect_signal_activity(sampler.sample_buffer, BUFFER_SIZE);
         
         if (activity) {
