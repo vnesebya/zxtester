@@ -128,16 +128,21 @@ void reduce_buffer_to_32(const uint32_t *buffer, uint32_t word_count, reduce_t o
     uint8_t last_state = get_sample_bit(buffer, 0);
     uint8_t cursor = 0;  
     bool force_transition = false;
-    // bool first_sampleset = true;
-    for (uint32_t i = 1; i < word_count * 32; i++) {
+    bool first_sampleset = true;
+
+    uint32_t offset = 1;
+    
+    for (; offset < word_count * 32; ++offset) {
+        current_state = get_sample_bit(buffer, offset);
+        if (last_state != current_state) {
+            last_state = current_state;
+            break;
+        }
+    }
+
+
+    for (uint32_t i = offset; i < word_count * 32; i++) {
         current_state = get_sample_bit(buffer, i);
-        // if (first_sampleset && (last_state == current_state)) {
-        //     last_state = current_state;
-        //     continue;
-        // } else {
-        //     first_sampleset = false;
-        //     // last_state = current_state;
-        // }
 
         if (force_transition || current_state != last_state) {
             if (current_pulse_length > avg_fullpulse_width / 2 ) {
