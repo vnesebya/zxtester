@@ -99,7 +99,7 @@ void print_analysis_result(const analysis_result_t * res, uint32_t capture_id, c
     printf("Duty cycle: %.1f%%\n", res->duty_cycle);
 
     // Reduced 32-bit pattern (remove spikes) and display
-    uint8_t reduced[32] = {0};
+    reduce_t reduced[128] = {0};
 
 
     reduce_buffer_to_32(buffer, res->word_count, reduced, res->high_count / (res->transitions * 2));
@@ -120,22 +120,49 @@ void print_analysis_result(const analysis_result_t * res, uint32_t capture_id, c
     uint32_t display_samples = 16;
     uint32_t sample_width = oled.width / display_samples;
 
+    uint16_t zero_y = 63;
+    uint16_t one_y = 46;
+    uint16_t sample_height = zero_y - one_y;
+    reduce_t last_val = reduced[0];
+    uint16_t cursor = 0;
+
+    uint16_t zero_width = (1.0 - (res->duty_cycle / 100.0)) * sample_width * 2.0;
+    uint16_t one_width = (res->duty_cycle / 100.0) * sample_width * 2.0;
+    // uint16_t zero_width = (1.0 - (res->duty_cycle / 100.0)) * sample_width;
+    // uint16_t one_width = (res->duty_cycle / 100.0) * sample_width;
+
     for (uint32_t i = 0; i < display_samples; i++) {
-        // bits[i] = reduced[i] ? '-' : '_';
-        // putchar(bits[i]);
-        
-        if (reduced[i]) {
 
-            for (int n = 0; n < sample_width; ++n)
-                ssd_draw_fullpixel(&oled, i*8 + n, 46, true);
-
-        } else {
-
-            for (int n = 0; n < sample_width; ++n)
-                ssd_draw_fullpixel(&oled, i*8 + n, 56, true);
-
+        if (last_val != reduced[i]) {
+            for (int n = one_y; n < zero_y; ++n)
+                ssd_draw_fullpixel(&oled, cursor, n, true);
         }
+        
+        switch (reduced[i]) {
+            case reduced_one: {
+                for (int n = 0; n < one_width; ++n)
+                    ssd_draw_fullpixel(&oled, cursor + n, one_y, true);
+                cursor += one_width;    
+                last_val = reduced[i];
+            } break;
+            
+            case reduced_zero: {
+                for (int n = 0; n < zero_width; ++n)
+                    ssd_draw_fullpixel(&oled, cursor + n, zero_y, true);
+                cursor += zero_width;    
+                last_val = reduced[i];
+            } break;
+
+            case reduced_pin: {
+                for (int n = one_y; n < zero_y; ++n)
+                    ssd_draw_fullpixel(&oled, cursor, n, true);
+                cursor += 1;    
+            } break;
+        }
+        if (cursor >= 127 ) 
+            break;
     }
+
     putchar('\n');
     // ssd1306_draw_string(&oled, 1, 40, bits);
     ssd1306_show(&oled);

@@ -122,25 +122,31 @@ static inline uint8_t get_sample_bit(const uint32_t *buffer, uint32_t sample_ind
     return (buffer[word_idx] >> bit) & 1u;
 }
 
-void reduce_buffer_to_32(const uint32_t *buffer, uint32_t word_count, uint8_t out[32], uint32_t avg_fullpulse_width) {
+void reduce_buffer_to_32(const uint32_t *buffer, uint32_t word_count, reduce_t out[128], uint32_t avg_fullpulse_width) {
     uint8_t current_state;
     uint8_t current_pulse_length;
     uint8_t last_state = get_sample_bit(buffer, 0);
-    // printf("**************************** %d %d\n", avg_fullpulse_width, word_count);
     uint8_t cursor = 0;  
     bool force_transition = false;
+    // bool first_sampleset = true;
     for (uint32_t i = 1; i < word_count * 32; i++) {
         current_state = get_sample_bit(buffer, i);
+        // if (first_sampleset && (last_state == current_state)) {
+        //     last_state = current_state;
+        //     continue;
+        // } else {
+        //     first_sampleset = false;
+        //     // last_state = current_state;
+        // }
 
         if (force_transition || current_state != last_state) {
-            // printf("[%d] TRANSITION!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!! %d %d %d %d\n", i, current_state, last_state, current_pulse_length, avg_fullpulse_width);
             if (current_pulse_length > avg_fullpulse_width / 2 ) {
-                // printf("push at %d data %d\n", cursor, last_state);
-
                 out[cursor++] = last_state;             
-                if (cursor == 32)
-                    return;
-            } 
+            } else {
+                out[cursor++] = reduced_pin;
+            }
+            if (cursor == 128)
+                return;
 
             current_pulse_length = 1;
             last_state = current_state;

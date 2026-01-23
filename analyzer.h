@@ -28,6 +28,12 @@ typedef struct {
     signal_type_t signal_type;
 } analysis_result_t;
 
+typedef enum: int8_t {
+    reduced_zero = 0,
+    reduced_one  = 1,
+    reduced_pin  = 2
+} reduce_t;
+
 // Analyze buffer and return populated result
 analysis_result_t analyze_signal_buffer(const uint32_t *buffer, uint32_t word_count, double sample_rate);
 
@@ -37,6 +43,6 @@ bool detect_signal_activity(const uint32_t *buffer, uint32_t word_count);
 // Calculate duty cycle (percentage of HIGH samples) from the raw buffer
 float calculate_duty_cycle(const uint32_t *buffer, uint32_t word_count);
 
-void reduce_buffer_to_32(const uint32_t *buffer, uint32_t word_count, uint8_t out[32], uint32_t avg_fullpulse_width);
+void reduce_buffer_to_32(const uint32_t *buffer, uint32_t word_count, reduce_t out[32], uint32_t avg_fullpulse_width);
 
 #endif // ANALYZER_H
