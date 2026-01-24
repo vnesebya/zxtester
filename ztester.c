@@ -11,7 +11,11 @@
 #include "units.h"
 #include "button.h"
 
-//
+// Buttons
+#define BTN_RIGHT_PIN 14
+#define BTN_LEFT_PIN 13
+
+// Display samples
 #define MIN_DISPLAY_SAMPLES 2
 #define MAX_DISPLAY_SAMPLES 32
 #define DISPLAY_SAMPLES 8
@@ -45,8 +49,6 @@ ssd1306_t oled = {
     .SCL = 5,
 };
 
-#define BTN_RIGHT_PIN 14
-#define BTN_LEFT_PIN 13
 
 // Signal sampler
 #define SIGNAL_PIN 8
@@ -79,7 +81,6 @@ void print_analysis_result(const analysis_result_t * res, uint32_t capture_id, c
 
     printf("Avg low length: %.1f, Avg high length: %.1f\n", res->avg_low_pulse, res->avg_high_pulse);
 
-           
     printf("Low samples: %lu (%.1f%%)\n", (unsigned long)(res->total_samples - res->high_count),
            ((res->total_samples - res->high_count) * 100.0) / res->total_samples);
     printf("Transitions: %lu\n", (unsigned long)res->transitions);
@@ -272,6 +273,7 @@ int main() {
             }
         }
 
+        // Left button
         button_tick(&btn1);
         if (button_click(&btn1)) {
             if (display_samples < max_display_samples) display_samples++;
@@ -279,7 +281,7 @@ int main() {
         if (button_hold(&btn1)) {
             if (display_samples < max_display_samples) display_samples = display_samples * 2;
         }
-        
+        // Right button
         button_tick(&btn2);
         if (button_click(&btn2)) {
             if (display_samples > min_display_samples) display_samples--;
