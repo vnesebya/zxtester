@@ -15,7 +15,7 @@ sudo apt install cmake python3 build-essential gcc-arm-none-eabi libnewlib-arm-n
 git clone -b master https://github.com/raspberrypi/pico-sdk.git
 cd pico-sdk
 git submodule update --init
-export PICO_SDK_PATH=$(pwd)../pico-sdk
+export PICO_SDK_PATH=$(pwd)
 ```
 
 ### Клонирование репозитория
